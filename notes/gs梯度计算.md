@@ -26,54 +26,53 @@
   || $\frac{\partial Loss}{\partial \mu_{gaussian2d}}$ |
 * 用到的重要前向渲染公式：
   1. **相对坐标计算 (Delta)：** 计算像素坐标 $(x, y)$ 与高斯球 2D 中心 $\mu = (\mu_x, \mu_y)$ 的差值。
+
     $$
-    \begin{equation}
     \begin{aligned}
       dx &= x - \mu_x \\
       dy &= y - \mu_y
     \end{aligned}
-    \end{equation}
     $$
+
   2. **高斯指数部分 ```(Power / G)```：** 利用 2D 协方差矩阵的逆（即 conic2D，包含三个独立元素 $\Sigma^{-1}_{11}, \Sigma^{-1}_{12}, \Sigma^{-1}_{22}$）计算马氏距离的负半值。
+    
     $$
-    \begin{equation}
     \begin{aligned}
       Power &= -\frac{1}{2} (X - \mu)^T \Sigma^{-1} (X - \mu) \\
             &= -0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2 \\
             &= -0.5 \cdot \Sigma^{-1}_{11} \cdot (x - \mu_x)^2 - \Sigma^{-1}_{12} \cdot (x - \mu_x) \cdot (y - \mu_y) - 0.5 \cdot \Sigma^{-1}_{22} \cdot (y - \mu_y)^2
     \end{aligned}
-    \end{equation}
     $$
+
   3. **当前层的最终 Alpha ($\alpha_i$)：** 由基础不透明度（opacity）乘上高斯衰减。
+    
     $$
-    \begin{equation}
     \begin{aligned}
       \alpha_i = opacity_i \cdot \exp(Power)
     \end{aligned}
-    \end{equation}
     $$   
+    
   4. **Alpha 混合与透射率 (Alpha-compositing)：** 设 $T_i$ 为光线到达第 $i$ 个高斯球时的累积透射率（即背景光还能透过多少，初始为 1）。最终像素颜色:
+
     $$
-    \begin{equation}
     \begin{aligned}
       C_{pixel} &= \sum_{i} c_i \cdot \alpha_i \cdot T_i \\
                 &= \sum_{i} c_i \cdot \alpha_i \cdot (1 - \alpha_0)(1 - \alpha_1)\dots(1 - \alpha_{i - 1})
     \end{aligned}
-    \end{equation}
     $$    
-#### 求解1：颜色梯度 $\frac{\partial Loss}{\partial RGB_{gaussian2d}} $ (对应了```renderCUDA```核函数中的```dL_dcolors```)
+#### 求解1：颜色梯度 $\frac{\partial Loss}{\partial RGB_{gaussian2d}}$ (对应了```renderCUDA```核函数中的```dL_dcolors```)
+
   $$
-  \begin{equation}
   \begin{aligned}
     \frac{\partial Loss}{\partial RGB_{gaussian2d}}
               &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot{\frac{\partial {RGB_{pixel}}}{\partial RGB_{gaussian2d}}} \\
               &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot (\alpha_i \cdot T_i)
   \end{aligned}
-  \end{equation}
   $$ 
+
   将结果按照 **三个通道(R, G, B)** 进行展开：
+
   $$
-  \begin{equation}
   \begin{aligned}
     \frac{\partial Loss}{\partial RGB_{gaussian2d}}
               &= \begin{bmatrix}
@@ -88,11 +87,11 @@
                   \end{bmatrix}
                   \cdot (\alpha_i \cdot T_i)
   \end{aligned}
-  \end{equation}
   $$     
+
 #### 求解2：基础不透明度 $ opacity_i $ 梯度 $\frac{\partial Loss}{\partial opacity_{gaussian2d}}$ (对应了```renderCUDA```核函数中的```dL_dopacity```)
+  
   $$
-  \begin{equation}
   \begin{aligned}
     \frac{\partial Loss}{\partial opacity_{gaussian2d}}
               &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial opacity_i} \\
@@ -101,32 +100,32 @@
               &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \exp(Power) \cdot[T_i \cdot C_i - T_i \cdot \alpha_{i+1} \cdot C_{i+1} - T_i \cdot (1-\alpha_{i+1})\cdot \alpha_{i+2} \cdot C_{i+2} - \dots] \\
               &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \exp(Power) \cdot T_i \cdot (c_i - C_{after\_norm})
   \end{aligned}
-  \end{equation}
   $$ 
+
   > 针对梯度计算中的$\frac{\partial {RGB_{pixel}}}{\partial \alpha_i}$，我们可以通过将椭球分为前、中、后三部分得以简化计算，方法如下：
-  > 由于 $$
-  \begin{equation}
+  > 由于 
+  
+  > $$
   \begin{aligned}
     C_{pixel} &= \sum_{i} c_i \cdot \alpha_i \cdot T_i \\
               &= \sum_{i = 0}^{k-1} c_i \cdot \alpha_i \cdot T_i  + T_k \cdot \alpha_k \cdot c_k + \sum_{i = k+1} c_i \cdot \alpha_i \cdot T_i\\
               &= C_{before} + T_k \cdot \alpha_k \cdot c_k + T_k \cdot (1 - \alpha_k) \cdot C_{after\_norm}
   \end{aligned}
-  \end{equation}
   $$
+
   > $C_{after\_norm}$ 为后续所有高斯球在该点剥离了 $T_{i+1}$ 衰减后的归一化累积颜色。
+  
   > $$
-  \begin{equation}
   \begin{aligned}
     \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} &= 
     \frac{\partial C_{pixel}}{\partial \alpha_i} = 0 + T_i \cdot c_i - T_i \cdot C_{after\_norm} = T_i \cdot (c_i - C_{after\_norm})
   \end{aligned}
-  \end{equation}
   $$
 
 
 #### 求解3：2D 协方差矩阵的逆的梯度 $\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$ (对应了```renderCUDA```核函数中的```dL_dconic2D```)
+  
   $$
-  \begin{equation}
   \begin{aligned}
     \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} 
     &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \Sigma^{-1}_{gaussian2d}} \\
@@ -144,12 +143,12 @@
     \end{bmatrix}
     \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i}
   \end{aligned}
-  \end{equation}
   $$ 
+  
   > 前向传播把 conic 作为 Rendering 阶段的直接输入参数，那么 Rendering 的反向传播自然也就只能算到 $\frac{\partial L}{\partial \Sigma_{gaussian2d}^{-1}}$ (dL_dconic2D) 为止了
 #### 求解4：2D 均值坐标梯度 $\frac{\partial Loss}{\partial \mu_{gaussian2d}}$ (对应了```renderCUDA```核函数中的```dL_dmean2D```)
+  
   $$
-  \begin{equation}
   \begin{aligned}
     \frac{\partial Loss}{\partial \mu_{gaussian2dPIXEL}}
     &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial Power} \cdot \frac{\partial Power}{\partial \mu_{gaussian2d}} \\
@@ -175,19 +174,26 @@
     \end{bmatrix}
     \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i}
   \end{aligned}
-  \end{equation}
   $$  
+
   这里所求梯度是损失函数关于像素空间均值坐标的梯度，为了对接上游```preprocessCUDA```中预期的NDC（标准化设备坐标）空间输入，还需要求一个对**像素坐标梯度**与**视口变换缩放因子**做哈达玛积（Hadamard product）
+  
   $$
-  \begin{equation}
   \begin{aligned}
     \frac{\partial Loss}{\partial \mu_{gaussian2d}} = \frac{\partial Loss}{\partial \mu_{gaussian2dNDC}}
     &= \frac{\partial Loss}{\partial \mu_{gaussian2dPIXEL}} \odot \begin{bmatrix} 0.5 W \\ 0.5 H \end{bmatrix}
   \end{aligned}
-  \end{equation}
   $$
+
   > 从标准化设备坐标到像素坐标的视口变换 (Viewport Transformation / Pixel Space)：将 $[-1, 1]$ 的 NDC 坐标映射到真实的屏幕像素坐标 $\mu_{2D} = (u, v)$ 上。已知屏幕的宽度为 $W$，高度为 $H$。
-  $$u = \frac{(x_{ndc} + 1) \cdot W - 1}{2}$$$$v = \frac{(y_{ndc} + 1) \cdot H - 1}{2}$$    
+  
+  $$
+  u = \frac{(x_{ndc} + 1) \cdot W - 1}{2}
+  $$
+  
+  $$
+  v = \frac{(y_{ndc} + 1) \cdot H - 1}{2}
+  $$    
 ### preprocess 部分的梯度计算 —— 链式法则
 #### 前置准备工作
 * 
@@ -207,11 +213,13 @@
 * 用到的重要**前向预处理**公式：
   1. 根据**旋转四元数**和**缩放矩阵**构建**3D协方差矩阵**：
   * 缩放因子矩阵：
+  
   $$ S = \begin{bmatrix}
     s_x & 0 & 0 \\ 0 & s_y & 0 \\ 0 & 0 & s_z
   \end{bmatrix}
   $$
   * 旋转四元数$q = [r, x, y, z]$需要根据四元数-旋转矩阵的公式转化为旋转矩阵：
+  
   $$ R = \begin{bmatrix}
     1 - 2(y^2 + z^2) & 2(xy - zr) & 2(xz + yr) \\
     2(xy + zr) & 1-2(x^2+z^2) & 2(yz - xr) \\
@@ -219,6 +227,7 @@
   \end{bmatrix}
   $$
   * 协方差矩阵：
+  
   $$\begin{equation}
     \begin{aligned}
       \Sigma_{3D} &= M^TM \\ &= (SR)^T(SR)\\ &=R^TS^TSR
@@ -227,8 +236,8 @@
   $$ 
   2. 从**3D协方差到2D协方差**的**EWA Splat**的过程：
   * Jacobi矩阵：
+  
   $$
-  \begin{equation}
   \begin{aligned}
   J &= 
   \begin{bmatrix}
@@ -243,24 +252,24 @@
   0 & 0 & 0
   \end{bmatrix}
   \end{aligned}
-  \end{equation}
   $$
   * EWA Splat公式：
+  
   $$
-  \begin{equation}
-    \Sigma_{2D} = J W \Sigma_{3D} W^T J^T
-  \end{equation}
+  \Sigma_{2D} = J W \Sigma_{3D} W^T J^T
   $$
   3. **3D均值**到**2D均值**的投影 (MVP变换)
   * 从世界坐标系变换到齐次裁剪空间坐标
-  $$\begin{equation}
+  
+  $$
     \begin{aligned}
       p_{hom} &= (p_x, p_y, p_z, p_w)^T &= P \cdot V \cdot (x, y, z, 1)^T
     \end{aligned}
-  \end{equation}
   $$
     > GAMES101告诉我们 Project 变换一般是这样的，其将z的信息融合到了x和y中：
-  $$\begin{bmatrix} p_x \\ p_y \\ p_z \\ p_w \end{bmatrix} =
+  
+  > $$
+  \begin{bmatrix} p_x \\ p_y \\ p_z \\ p_w \end{bmatrix} =
     \begin{bmatrix}
     P_{00} & 0 & P_{02} & 0 \\
     0 & P_{11} & P_{12} & 0 \\
@@ -268,9 +277,13 @@
     0 & 0 & 1 & 0 
     \end{bmatrix}
     \begin{bmatrix} x \\ y \\ z \\ 1 
-  \end{bmatrix}$$
+  \end{bmatrix}
+  $$
   * 从齐次裁剪坐标到标准化设备坐标(NDC, Normalized Device Coordinates)：为了产生“近大远小”的透视效果，必须将齐次坐标除以它的第四个分量 $p_w$（实质上代表了深度信息的某种变形）。
-  $$x_{ndc} = \frac{p_x}{p_w}$$$$y_{ndc} = \frac{p_y}{p_w}$$
+  
+  $$
+  x_{ndc} = \frac{p_x}{p_w}$$$$y_{ndc} = \frac{p_y}{p_w}
+  $$
   * 从标准化设备坐标到像素坐标的视口变换 (Viewport Transformation / Pixel Space)：将 $[-1, 1]$ 的 NDC 坐标映射到真实的屏幕像素坐标 $\mu_{2D} = (u, v)$ 上。已知屏幕的宽度为 $W$，高度为 $H$。
   $$u = \frac{(x_{ndc} + 1) \cdot W - 1}{2}$$
   $$v = \frac{(y_{ndc} + 1) \cdot H - 1}{2}$$
