@@ -413,6 +413,7 @@ $$
   > $$
   G(x) \propto \exp\left(-\frac{1}{2} (x - \mu)^T \Sigma_{2D}^{-1} (x - \mu)\right)
   $$ 
+  
   > 在 Rendering 的像素级循环中，我们要计算的是高斯衰减指数 Power。这个公式里天生自带的就是 $\Sigma_{2D}^{-1}$。如果我们求对 $\Sigma_{2D}$ 的梯度，在链式法则中就会多出求逆矩阵导数这一极其繁琐的步骤。**从工程角度看，求矩阵的逆是非常耗时的操作。** 如果每个像素在计算时都去对 $\Sigma_{2D}$ 求一次逆，GPU 会慢到无法忍受。因此，3DGS 在 preprocess 阶段，为每个高斯球计算好 $\Sigma_{2D}$ 后，立刻求逆，并把逆矩阵 $\Sigma_{2D}^{-1}$ 命名为 conic 保存下来。这样在渲染时，成千上万的像素只需要做简单的乘法和加法。
   
 ##### 第一步：从 逆矩阵 回退到 正矩阵 ($\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} \rightarrow \frac{\partial Loss}{\partial \Sigma_{gaussian2d}}$)
