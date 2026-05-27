@@ -344,6 +344,7 @@ $$
   $C_{2,4} = 0.5462742152960396$
   
   > 🔴 第 3 阶 (Degree 3) —— 三次依赖 (7 个系数)用于捕获极高频率的光照细节（如锐利的反射光边缘）：
+
   > $$
   \begin{aligned}
   C_{l=3} &= C_{3,0} \cdot y(3x^2 - y^2) \cdot sh[9] \\
@@ -366,8 +367,11 @@ $$
   $C_{3,6} = -0.5900435899266435$
   
   > 🎨 最终颜色映射 (Final Result)将上述四个阶次的结果全部累加后，还需要进行最终的偏置和截断操作：
+
   > $$
-  Color_{raw} = C_{l=0} + C_{l=1} + C_{l=2} + C_{l=3} + 0.5$$
+  Color_{raw} = C_{l=0} + C_{l=1} + C_{l=2} + C_{l=3} + 0.5
+  $$
+
   > $$
   Color_{final} = \max(Color_{raw}, 0.0)
   $$
@@ -403,18 +407,30 @@ $$
 #### 求解2：(中间过渡变量) 3D 协方差矩阵梯度 $\frac{\partial Loss}{\partial \Sigma_{3D}}$ (对应了preprocessCUDA核函数中的```dL_dcov3D```)
   **已知：** 我们手中已经有的是从render阶段反向传回的**2d协方差矩阵的逆矩阵的梯度** $\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} $
   > Q : 为什么这里是逆矩阵的梯度？
+
   > A : 2D 高斯分布的概率密度函数：
-  > $$G(x) \propto \exp\left(-\frac{1}{2} (x - \mu)^T \Sigma_{2D}^{-1} (x - \mu)\right)$$ 在 Rendering 的像素级循环中，我们要计算的是高斯衰减指数 Power。这个公式里天生自带的就是 $\Sigma_{2D}^{-1}$。如果我们求对 $\Sigma_{2D}$ 的梯度，在链式法则中就会多出求逆矩阵导数这一极其繁琐的步骤。**从工程角度看，求矩阵的逆是非常耗时的操作。** 如果每个像素在计算时都去对 $\Sigma_{2D}$ 求一次逆，GPU 会慢到无法忍受。因此，3DGS 在 preprocess 阶段，为每个高斯球计算好 $\Sigma_{2D}$ 后，立刻求逆，并把逆矩阵 $\Sigma_{2D}^{-1}$ 命名为 conic 保存下来。这样在渲染时，成千上万的像素只需要做简单的乘法和加法。
+
+  > $$
+  G(x) \propto \exp\left(-\frac{1}{2} (x - \mu)^T \Sigma_{2D}^{-1} (x - \mu)\right)
+  $$ 
+  > 在 Rendering 的像素级循环中，我们要计算的是高斯衰减指数 Power。这个公式里天生自带的就是 $\Sigma_{2D}^{-1}$。如果我们求对 $\Sigma_{2D}$ 的梯度，在链式法则中就会多出求逆矩阵导数这一极其繁琐的步骤。**从工程角度看，求矩阵的逆是非常耗时的操作。** 如果每个像素在计算时都去对 $\Sigma_{2D}$ 求一次逆，GPU 会慢到无法忍受。因此，3DGS 在 preprocess 阶段，为每个高斯球计算好 $\Sigma_{2D}$ 后，立刻求逆，并把逆矩阵 $\Sigma_{2D}^{-1}$ 命名为 conic 保存下来。这样在渲染时，成千上万的像素只需要做简单的乘法和加法。
   
-##### 第一步：从 逆矩阵 回退到 正矩阵 **($\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} \rightarrow \frac{\partial Loss}{\partial \Sigma_{gaussian2d}}$)**
+##### 第一步：从 逆矩阵 回退到 正矩阵 ($\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} \rightarrow \frac{\partial Loss}{\partial \Sigma_{gaussian2d}}$)
   > **矩阵求导：**
-  > 在矩阵微积分中，对于任意可逆对称矩阵 $A$，其逆矩阵的微分公式为：$d(A^{-1}) = -A^{-1} (dA) A^{-1}$
+  > 在矩阵微积分中，对于任意可逆对称矩阵 $A$，其逆矩阵的微分公式为：
+  
+  > $$
+  d(A^{-1}) = -A^{-1} (dA) A^{-1}
+  $$
   > 代入 $A = \Sigma_{2D}$，已知目标是根据链式法则求 $\frac{\partial L}{\partial \Sigma_{2D}}$。将上述微分公式代入多元微积分的迹（Trace）技巧中，可以非常快地得出协方差矩阵梯度的转换公式：
-  > $$\frac{\partial L}{\partial \Sigma_{2D}} = - \Sigma_{2D}^{-1} \cdot \left( \frac{\partial L}{\partial \Sigma_{2D}^{-1}} \right) \cdot \Sigma_{2D}^{-1}$$
+
+  > $$
+  \frac{\partial L}{\partial \Sigma_{2D}} = - \Sigma_{2D}^{-1} \cdot \left( \frac{\partial L}{\partial \Sigma_{2D}^{-1}} \right) \cdot \Sigma_{2D}^{-1}
+  $$
   > **结论：** 误差对正矩阵的梯度，等于误差对逆矩阵的梯度在两边各乘一次逆矩阵，并反转方向。
   
   但是在 GPU 核函数（computeCov2DCUDA）中，**线程处理 $2 \times 2$ 矩阵的乘法非常浪费寄存器**。所以作者把这个 $2 \times 2$ 的对称矩阵拆成了 3 个独立的标量来进行链式求导。
-  设 2D 协方差矩阵 $ \Sigma_{2D} = \begin{bmatrix} a & b \\ b & c \end{bmatrix} $
+  设 2D 协方差矩阵 $\Sigma_{2D} = \begin{bmatrix} a & b \\ b & c \end{bmatrix}$
   
   $$
     \begin{aligned}
@@ -472,12 +488,19 @@ $$
       \end{bmatrix}
     \end{aligned}
   $$
-  > $\frac{\partial L}{\partial c_x} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$ 矩阵的左上角元素 
-  > $\frac{\partial L}{\partial c_y} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$ 矩阵的右上角元素 \ 左下角元素
-  > $\frac{\partial L}{\partial c_z} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$ 矩阵的右下角元素
+  > 矩阵的左上角元素:
+
+  > $$\frac{\partial L}{\partial c_x} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$$  
+  > 矩阵的右上角元素 \ 左下角元素:
+
+  > $$\frac{\partial L}{\partial c_y} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$$ 
+  > 矩阵的右下角元素:
+
+  > $$\frac{\partial L}{\partial c_z} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$$ 
 
 ##### 第二步：从 2D高斯 回退到 3D高斯 ($\frac{\partial Loss}{\partial \Sigma_{gaussian2d}}\rightarrow\frac{\partial Loss}{\partial \Sigma_{gaussian3d}}$)
   由于：
+  
   $$
   \Sigma_{gaussian2d} = T \Sigma_{gaussian3d} T^T = J \cdot W \cdot \Sigma_{gaussian3d} \cdot W^T \cdot J^T
   $$
@@ -497,7 +520,10 @@ $$
 
   > 上式中都是$3 \times 3$的矩阵
 #### 求解3：3D 缩放梯度 $\frac{\partial Loss}{\partial S}$ 
-> ❗注意矩阵求导不能简单用标量的链导法则解决，其应遵循**全微分（Differential）和迹（Trace）技巧**。矩阵求导只有一个核心第一性原理：$$d(Loss) = \text{tr}\left( \left(\frac{\partial Loss}{\partial X}\right)^T dX \right)$$只要你能把等式右边凑成 $\text{tr}(\text{某矩阵}^T \cdot dX)$ 的形式，那个“某矩阵”就是完美的梯度！
+> ❗注意矩阵求导不能简单用标量的链导法则解决，其应遵循**全微分（Differential）和迹（Trace）技巧**。矩阵求导只有一个核心第一性原理：
+> 
+> $$d(Loss) = \text{tr}\left( \left(\frac{\partial Loss}{\partial X}\right)^T dX \right)$$
+> 只要你能把等式右边凑成 $\text{tr}(\text{某矩阵}^T \cdot dX)$ 的形式，那个“某矩阵”就是完美的梯度！
 ##### 前半阶段：求$\frac{\partial Loss}{\partial M}$
   
   $$
@@ -525,7 +551,7 @@ $$
     \end{aligned}
   $$
 
-##### 后半阶段：求$\frac{\partial Loss}{\partial S}$
+##### 后半阶段：求 $\frac{\partial Loss}{\partial S}$
   
   $$
     \begin{aligned}
@@ -545,7 +571,11 @@ $$
   $$
 
 ##### 最后一步
-  这里的缩放因子矩阵$S$是一个对角矩阵$S = \text{diag}(s_x, s_y, s_z)$。所以，我们只需要提取上述结果矩阵的主对角线元素即可，即 $$\frac{\partial Loss}{\partial S} = \text{diag}(2 \cdot S \cdot R \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}} \cdot R^T)$$
+这里的缩放因子矩阵$S$是一个对角矩阵$S = \text{diag}(s_x, s_y, s_z)$。所以，我们只需要提取上述结果矩阵的主对角线元素即可，即 
+
+$$
+\frac{\partial Loss}{\partial S} = \text{diag}(2 \cdot S \cdot R \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}} \cdot R^T)
+$$
 #### 求解4：3D 旋转梯度 $\frac{\partial Loss}{\partial q}$
 ##### 前半阶段，借助上一段求解出来的$\frac{\partial Loss}{\partial M}$求$\frac{\partial Loss}{\partial R}$：
 
@@ -577,29 +607,39 @@ $$
   \end{bmatrix}
   $$
 
-* 刚刚求出的误差对旋转矩阵的梯度矩阵：$$U = \frac{\partial Loss}{\partial R} = S \cdot 2 \cdot S \cdot R \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}} $$
+* 刚刚求出的误差对旋转矩阵的梯度矩阵：
+
+$$
+U = \frac{\partial Loss}{\partial R} = S \cdot 2 \cdot S \cdot R \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}} 
+$$
+
 * 根据标量对矩阵求导的链式法则（Frobenius 内积），可以分别求出：
   
-  $$
-    \begin{aligned}
-      \frac{\partial Loss}{\partial r} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial r} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial r} \\
-      \frac{\partial Loss}{\partial x} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial x} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial x} \\
-      \frac{\partial Loss}{\partial y} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial y} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial y} \\
-      \frac{\partial Loss}{\partial z} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial z} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial z}
-    \end{aligned}
-  $$
+$$
+  \begin{aligned}
+    \frac{\partial Loss}{\partial r} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial r} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial r} \\
+    \frac{\partial Loss}{\partial x} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial x} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial x} \\
+    \frac{\partial Loss}{\partial y} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial y} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial y} \\
+    \frac{\partial Loss}{\partial z} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial z} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial z}
+  \end{aligned}
+$$
   
-  $$
-    \begin{aligned}
-      \frac{\partial Loss}{\partial r} &= 2 \cdot (x U_{23} - x U_{32} + y U_{31} - y U_{13} + z U_{12} - z U_{21}) \\
-      \frac{\partial Loss}{\partial x} &= 2 \cdot (-2x U_{22} - 2x U_{33} + y U_{12} + y U_{21} + z U_{13} + z U_{31} + r U_{23} - r U_{32}) \\
-      \frac{\partial Loss}{\partial y} &= 2 \cdot (x U_{12} + x U_{21} - 2y U_{11} - 2y U_{33} + z U_{23} + z U_{32} + r U_{31} - r U_{13}) \\
-      \frac{\partial Loss}{\partial z} &= 2 \cdot (x U_{13} + x U_{31} + y U_{23} + y U_{32} - 2z U_{11} - 2z U_{22} + r U_{12} - r U_{21})
-    \end{aligned}
-  $$
+$$
+  \begin{aligned}
+    \frac{\partial Loss}{\partial r} &= 2 \cdot (x U_{23} - x U_{32} + y U_{31} - y U_{13} + z U_{12} - z U_{21}) \\
+    \frac{\partial Loss}{\partial x} &= 2 \cdot (-2x U_{22} - 2x U_{33} + y U_{12} + y U_{21} + z U_{13} + z U_{31} + r U_{23} - r U_{32}) \\
+    \frac{\partial Loss}{\partial y} &= 2 \cdot (x U_{12} + x U_{21} - 2y U_{11} - 2y U_{33} + z U_{23} + z U_{32} + r U_{31} - r U_{13}) \\
+    \frac{\partial Loss}{\partial z} &= 2 \cdot (x U_{13} + x U_{31} + y U_{23} + y U_{32} - 2z U_{11} - 2z U_{22} + r U_{12} - r U_{21})
+  \end{aligned}
+$$
 
 #### 求解5：3D 均值梯度 $\frac{\partial L}{\partial \mu_{gaussian3d}}$
-3D均值(即3D高斯椭球球心)在前向传播中影响了三大模块：2D高斯的均值、颜色、2D高斯的协方差矩阵，所以其最终的梯度应该由三部分构成，形如$\frac{\partial Loss}{\partial \mu_{3D}} = \text{Grad}_{A} (\text{位置}) + \text{Grad}_{B} (\text{颜色}) + \text{Grad}_{C} (\text{形状})$
+3D均值(即3D高斯椭球球心)在前向传播中影响了三大模块：2D高斯的均值、颜色、2D高斯的协方差矩阵，所以其最终的梯度应该由三部分构成，形如
+
+$$
+\frac{\partial Loss}{\partial \mu_{3D}} = \text{Grad}_{A} (\text{位置}) + \text{Grad}_{B} (\text{颜色}) + \text{Grad}_{C} (\text{形状})
+$$
+
 ##### 由$\frac{\partial Loss}{\partial \mu_{gaussian2d}}$求$\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{位置})$
 * 首先，明确$\mu_{gaussian2d}$v不是在像素坐标系上而是在NDC坐标系上(```renderCUDA```部分已经进行了预处理)，所以现在的流程就是将NDC坐标系的梯度回传给世界坐标系。其次由于涉及到透视变换与可能存在的相机旋转，空间坐标系中任意一个方向的坐标变化($x$ 或 $y$ 或 $z$)都会引发NDC坐标系中$x$和$y$两个方向的变化，所以这里应该使用多元微分学中的**全导数公式**，即：
 
