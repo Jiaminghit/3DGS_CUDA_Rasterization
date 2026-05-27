@@ -102,7 +102,7 @@ $$
   \end{aligned}
   $$ 
 
-  > 针对梯度计算中的$\frac{\partial {RGB_{pixel}}}{\partial \alpha_i}$，我们可以通过将椭球分为前、中、后三部分得以简化计算，方法如下：
+  > 针对梯度计算中的 $\frac{\partial {RGB_{pixel}}}{\partial \alpha_i}$ ，我们可以通过将椭球分为前、中、后三部分得以简化计算，方法如下：
   > 由于 
   
   > $$
@@ -196,7 +196,7 @@ $$
   $$    
 ### preprocess 部分的梯度计算 —— 链式法则
 #### 前置准备工作
-* 
+##### 
   | 已知 | 物理含义 | 对应CUDA Kernel函数中的参数 |
   |-|-|-|
   | $\frac{\partial Loss}{\partial RGB_{gaussian2d}} $ | 颜色梯度 | ```dL_dcolors``` |
@@ -210,34 +210,35 @@ $$
   | $\frac{\partial Loss}{\partial scale_{gaussian3d}}$ | 3D高斯的缩放因子 | ```dL_dscales``` |
   | $\frac{\partial Loss}{\partial quaternion_{gaussian3d}}$ | 3D高斯的旋转四元数| ```dL_drots``` |
   | $\frac{\partial L}{\partial \mu_{gaussian3d}}$| 3D高斯的均值坐标 | ```dL_dmeans``` |
-* 用到的重要**前向预处理**公式：
-  1. 根据**旋转四元数**和**缩放矩阵**构建**3D协方差矩阵**：
+##### 用到的重要**前向预处理**公式：
+1. 根据**旋转四元数**和**缩放矩阵**构建**3D协方差矩阵**：
   * 缩放因子矩阵：
   
-  $$ S = \begin{bmatrix}
-    s_x & 0 & 0 \\ 0 & s_y & 0 \\ 0 & 0 & s_z
-  \end{bmatrix}
-  $$
+$$ S = \begin{bmatrix}
+  s_x & 0 & 0 \\ 0 & s_y & 0 \\ 0 & 0 & s_z
+\end{bmatrix}
+$$
+
   * 旋转四元数$q = [r, x, y, z]$需要根据四元数-旋转矩阵的公式转化为旋转矩阵：
   
-  $$ R = \begin{bmatrix}
-    1 - 2(y^2 + z^2) & 2(xy - zr) & 2(xz + yr) \\
-    2(xy + zr) & 1-2(x^2+z^2) & 2(yz - xr) \\
-    2(xz - yr) & 2(yz + xr) & 1 - 2(x^2 + y^2)
-  \end{bmatrix}
-  $$
+$$ R = \begin{bmatrix}
+  1 - 2(y^2 + z^2) & 2(xy - zr) & 2(xz + yr) \\
+  2(xy + zr) & 1-2(x^2+z^2) & 2(yz - xr) \\
+  2(xz - yr) & 2(yz + xr) & 1 - 2(x^2 + y^2)
+\end{bmatrix}
+$$
   * 协方差矩阵：
   
-  $$
-    \begin{aligned}
-      \Sigma_{3D} &= M^TM \\ &= (SR)^T(SR)\\ &=R^TS^TSR
-    \end{aligned}
-  $$ 
+$$
+  \begin{aligned}
+    \Sigma_{3D} &= M^TM \\ &= (SR)^T(SR)\\ &=R^TS^TSR
+  \end{aligned}
+$$ 
   
-  2. 从**3D协方差到2D协方差**的**EWA Splat**的过程：
+2. 从**3D协方差到2D协方差**的**EWA Splat**的过程：
   * Jacobi矩阵：
   
-  $$
+$$
   \begin{aligned}
   J &= 
   \begin{bmatrix}
@@ -252,20 +253,20 @@ $$
   0 & 0 & 0
   \end{bmatrix}
   \end{aligned}
-  $$
+$$
   * EWA Splat公式：
   
-  $$
+$$
   \Sigma_{2D} = J W \Sigma_{3D} W^T J^T
-  $$
-  3. **3D均值**到**2D均值**的投影 (MVP变换)
+$$
+3. **3D均值**到**2D均值**的投影 (MVP变换)
   * 从世界坐标系变换到齐次裁剪空间坐标
   
-  $$
-    \begin{aligned}
-      p_{hom} &= (p_x, p_y, p_z, p_w)^T &= P \cdot V \cdot (x, y, z, 1)^T
-    \end{aligned}
-  $$
+$$
+  \begin{aligned}
+    p_{hom} &= (p_x, p_y, p_z, p_w)^T &= P \cdot V \cdot (x, y, z, 1)^T
+  \end{aligned}
+$$
     > GAMES101告诉我们 Project 变换一般是这样的，其将z的信息融合到了x和y中：
   
   > $$
@@ -290,7 +291,7 @@ $$
   * 从标准化设备坐标到像素坐标的视口变换 (Viewport Transformation / Pixel Space)：将 $[-1, 1]$ 的 NDC 坐标映射到真实的屏幕像素坐标 $\mu_{2D} = (u, v)$ 上。已知屏幕的宽度为 $W$，高度为 $H$。
   $$u = \frac{(x_{ndc} + 1) \cdot W - 1}{2}$$
   $$v = \frac{(y_{ndc} + 1) \cdot H - 1}{2}$$
-  4. **球谐函数**到**颜色**
+  1. **球谐函数**到**颜色**
   * 视角方向 $dir$：$dir = \frac{\mu_{3D} - cam\_pos}{||\mu_{3D} - cam\_pos||}$
   * 颜色 $c$：
   $$c = \sum_{l, m} SH_l^m \cdot Y_l^m(dir) + 0.5$$  
