@@ -575,7 +575,11 @@ $$
 $$
 
 * 现在需要求$\frac{\partial x_{ndc}}{\partial x_{3D}}$, $\frac{\partial y_{ndc}}{\partial x_{3D}}$, $\frac{\partial x_{ndc}}{\partial y_{3D}}$, $\frac{\partial y_{ndc}}{\partial y_{3D}}$, $\frac{\partial x_{ndc}}{\partial z_{3D}}$, $\frac{\partial y_{ndc}}{\partial z_{3D}}$
-> MP变换：$$p_{hom} = P \cdot (x, y, z, 1)^T$$ $$p_x = P_{00}x + P_{01}y + P_{02}z + P_{03}$$  $$p_y = P_{10}x + P_{11}y + P_{12}z + P_{13}$$  $$p_w = P_{30}x + P_{31}y + P_{32}z + P_{33}$$  
+> MP变换：
+> $$p_{hom} = P \cdot (x, y, z, 1)^T$$ 
+> $$p_x = P_{00}x + P_{01}y + P_{02}z + P_{03}$$  
+> $$p_y = P_{10}x + P_{11}y + P_{12}z + P_{13}$$  
+> $$p_w = P_{30}x + P_{31}y + P_{32}z + P_{33}$$  
 
 $$
 \begin{aligned}
@@ -613,8 +617,9 @@ $$
     \end{aligned}
 $$
 
-##### 由$\frac{\partial Loss}{\partial RGB_{gaussian2d}} $求$\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{颜色})$
+##### 由 $\frac{\partial Loss}{\partial RGB_{gaussian2d}}$ 求 $\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{颜色})$
 > 回顾球谐函数
+> 
 > $$
     \begin{aligned}
         Color_{final} &= \max(Color_{raw}, 0.0) \\
@@ -737,7 +742,9 @@ $$
     \end{aligned}
   $$
 
-> 这里用到了矩阵求导第一性原理：$$d(Loss) = \text{tr}\left( \left(\frac{\partial Loss}{\partial X}\right)^T dX \right)$$
+> 这里用到了矩阵求导第一性原理：
+> 
+> $$d(Loss) = \text{tr}\left( \left(\frac{\partial Loss}{\partial X}\right)^T dX \right)$$
 * 从$\frac{\partial Loss}{\partial J}$ 回退到 $\frac{\partial Loss}{\partial (t_x, t_y, t_z)}$(相机坐标系下的3D均值)：
   
   $$
