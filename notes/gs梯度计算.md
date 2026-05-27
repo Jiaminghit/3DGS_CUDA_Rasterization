@@ -25,41 +25,41 @@
   || $\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} $ |
   || $\frac{\partial Loss}{\partial \mu_{gaussian2d}}$ |
 * 用到的重要前向渲染公式：
-1. **相对坐标计算 (Delta)：** 计算像素坐标 $(x, y)$ 与高斯球 2D 中心 $\mu = (\mu_x, \mu_y)$ 的差值。
+  1. **相对坐标计算 (Delta)：** 计算像素坐标 $(x, y)$ 与高斯球 2D 中心 $\mu = (\mu_x, \mu_y)$ 的差值。
 
-    $$
-    \begin{aligned}
-      dx &= x - \mu_x \\
-      dy &= y - \mu_y
-    \end{aligned}
-    $$
+      $$
+      \begin{aligned}
+        dx &= x - \mu_x \\
+        dy &= y - \mu_y
+      \end{aligned}
+      $$
 
-2. **高斯指数部分 ```(Power / G)```：** 利用 2D 协方差矩阵的逆（即 conic2D，包含三个独立元素 $\Sigma^{-1}_{11}, \Sigma^{-1}_{12}, \Sigma^{-1}_{22}$）计算马氏距离的负半值。
+  2. **高斯指数部分 ```(Power / G)```：** 利用 2D 协方差矩阵的逆（即 conic2D，包含三个独立元素 $\Sigma^{-1}_{11}, \Sigma^{-1}_{12}, \Sigma^{-1}_{22}$ ）计算马氏距离的负半值。
+      
+      $$
+      \begin{aligned}
+        Power &= -\frac{1}{2} (X - \mu)^T \Sigma^{-1} (X - \mu) \\
+              &= -0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2 \\
+              &= -0.5 \cdot \Sigma^{-1}_{11} \cdot (x - \mu_x)^2 - \Sigma^{-1}_{12} \cdot (x - \mu_x) \cdot (y - \mu_y) - 0.5 \cdot \Sigma^{-1}_{22} \cdot (y - \mu_y)^2
+      \end{aligned}
+      $$
+
+  3. **当前层的最终 Alpha ($\alpha_i$)：** 由基础不透明度（opacity）乘上高斯衰减。
+      
+      $$
+      \begin{aligned}
+        \alpha_i = opacity_i \cdot \exp(Power)
+      \end{aligned}
+      $$   
     
-    $$
-    \begin{aligned}
-      Power &= -\frac{1}{2} (X - \mu)^T \Sigma^{-1} (X - \mu) \\
-            &= -0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2 \\
-            &= -0.5 \cdot \Sigma^{-1}_{11} \cdot (x - \mu_x)^2 - \Sigma^{-1}_{12} \cdot (x - \mu_x) \cdot (y - \mu_y) - 0.5 \cdot \Sigma^{-1}_{22} \cdot (y - \mu_y)^2
-    \end{aligned}
-    $$
+  4. **Alpha 混合与透射率 (Alpha-compositing)：** 设 $T_i$ 为光线到达第 $i$ 个高斯球时的累积透射率（即背景光还能透过多少，初始为 1）。最终像素颜色:
 
-3. **当前层的最终 Alpha ($\alpha_i$)：** 由基础不透明度（opacity）乘上高斯衰减。
-    
-    $$
-    \begin{aligned}
-      \alpha_i = opacity_i \cdot \exp(Power)
-    \end{aligned}
-    $$   
-    
-4. **Alpha 混合与透射率 (Alpha-compositing)：** 设 $T_i$ 为光线到达第 $i$ 个高斯球时的累积透射率（即背景光还能透过多少，初始为 1）。最终像素颜色:
-
-    $$
-    \begin{aligned}
-      C_{pixel} &= \sum_{i} c_i \cdot \alpha_i \cdot T_i \\
-                &= \sum_{i} c_i \cdot \alpha_i \cdot (1 - \alpha_0)(1 - \alpha_1)\dots(1 - \alpha_{i - 1})
-    \end{aligned}
-    $$    
+      $$
+      \begin{aligned}
+        C_{pixel} &= \sum_{i} c_i \cdot \alpha_i \cdot T_i \\
+                  &= \sum_{i} c_i \cdot \alpha_i \cdot (1 - \alpha_0)(1 - \alpha_1)\dots(1 - \alpha_{i - 1})
+      \end{aligned}
+      $$    
 #### 求解1：颜色梯度 $\frac{\partial Loss}{\partial RGB_{gaussian2d}}$ (对应了```renderCUDA```核函数中的```dL_dcolors```)
 
   $$
