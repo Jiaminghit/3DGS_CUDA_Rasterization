@@ -215,7 +215,9 @@ $$
   * 缩放因子矩阵：
   
 $$ S = \begin{bmatrix}
-  s_x & 0 & 0 \\ 0 & s_y & 0 \\ 0 & 0 & s_z
+  s_x & 0 & 0 \\
+  0 & s_y & 0 \\
+  0 & 0 & s_z
 \end{bmatrix}
 $$
 
@@ -254,11 +256,13 @@ $$
   \end{bmatrix}
   \end{aligned}
 $$
+
   * EWA Splat公式：
   
 $$
   \Sigma_{2D} = J W \Sigma_{3D} W^T J^T
 $$
+
 3. **3D均值**到**2D均值**的投影 (MVP变换)
   * 从世界坐标系变换到齐次裁剪空间坐标
   
@@ -267,19 +271,19 @@ $$
     p_{hom} &= (p_x, p_y, p_z, p_w)^T &= P \cdot V \cdot (x, y, z, 1)^T
   \end{aligned}
 $$
-    > GAMES101告诉我们 Project 变换一般是这样的，其将z的信息融合到了x和y中：
+> GAMES101告诉我们 Project 变换一般是这样的，其将z的信息融合到了x和y中：
   
-  > $$
-  \begin{bmatrix} p_x \\ p_y \\ p_z \\ p_w \end{bmatrix} =
-    \begin{bmatrix}
-    P_{00} & 0 & P_{02} & 0 \\
-    0 & P_{11} & P_{12} & 0 \\
-    0 & 0 & P_{22} & P_{23} \\
-    0 & 0 & 1 & 0 
-    \end{bmatrix}
-    \begin{bmatrix} x \\ y \\ z \\ 1 
+> $$
+\begin{bmatrix} p_x \\ p_y \\ p_z \\ p_w \end{bmatrix} =
+  \begin{bmatrix}
+  P_{00} & 0 & P_{02} & 0 \\
+  0 & P_{11} & P_{12} & 0 \\
+  0 & 0 & P_{22} & P_{23} \\
+  0 & 0 & 1 & 0 
   \end{bmatrix}
-  $$
+  \begin{bmatrix} x \\ y \\ z \\ 1 
+\end{bmatrix}
+$$
   * 从齐次裁剪坐标到标准化设备坐标(NDC, Normalized Device Coordinates)：为了产生“近大远小”的透视效果，必须将齐次坐标除以它的第四个分量 $p_w$（实质上代表了深度信息的某种变形）。
   
   $$
@@ -289,8 +293,14 @@ $$
   y_{ndc} = \frac{p_y}{p_w}
   $$
   * 从标准化设备坐标到像素坐标的视口变换 (Viewport Transformation / Pixel Space)：将 $[-1, 1]$ 的 NDC 坐标映射到真实的屏幕像素坐标 $\mu_{2D} = (u, v)$ 上。已知屏幕的宽度为 $W$，高度为 $H$。
-  $$u = \frac{(x_{ndc} + 1) \cdot W - 1}{2}$$
-  $$v = \frac{(y_{ndc} + 1) \cdot H - 1}{2}$$
+
+  $$
+  u = \frac{(x_{ndc} + 1) \cdot W - 1}{2}
+  $$
+  
+  $$
+  v = \frac{(y_{ndc} + 1) \cdot H - 1}{2}
+  $$
   1. **球谐函数**到**颜色**
   * 视角方向 $dir$：$dir = \frac{\mu_{3D} - cam\_pos}{||\mu_{3D} - cam\_pos||}$
   * 颜色 $c$：
