@@ -664,6 +664,7 @@ $$
 > $$p_y = P_{10}x + P_{11}y + P_{12}z + P_{13}$$  
 > $$p_w = P_{30}x + P_{31}y + P_{32}z + P_{33}$$ 
 >
+
 > $$
     \frac{\partial x_{ndc}}{\partial x} = \frac{\partial (\frac{p_x}{p_w})}{\partial x}
     = \frac{1}{p_w}\frac{\partial p_x}{\partial x} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial x} 
@@ -682,8 +683,7 @@ $$
     = \frac{P_{02}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{32} \\
     \frac{\partial y_{ndc}}{\partial z} = \frac{\partial (\frac{p_y}{p_w})}{\partial z}
     = \frac{1}{p_w}\frac{\partial p_y}{\partial z} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial z} 
-    = \frac{P_{12}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{32} \\
-$$
+    = \frac{P_{12}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{32} \\$$
 
 
 * 最后全部代入全导数公式即可：
@@ -726,13 +726,13 @@ $$
 1. 首先明确归一化视角：
     
 $$
-   \begin{aligned}
-       dir &= (dir_x, dir_y, dir_z) = \left( \frac{x'}{d}, \frac{y'}{d}, \frac{z'}{d} \right) \\
-       &= \left( \frac{x'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{y'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{z'}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \right) \\
-       &=  \left(\frac{x - c_x}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{y - c_y}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{z - c_z}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}} \right)
-   \end{aligned}
+  \begin{aligned}
+      dir &= (dir_x, dir_y, dir_z) = \left( \frac{x'}{d}, \frac{y'}{d}, \frac{z'}{d} \right) \\
+      &= \left( \frac{x'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{y'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{z'}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \right) \\
+      &=  \left(\frac{x - c_x}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{y - c_y}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{z - c_z}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}} \right)
+  \end{aligned}
 $$
-2. 分别展开求$\frac{\partial Loss}{\partial dir_x}$、$\frac{\partial Loss}{\partial dir_y}$、$\frac{\partial Loss}{\partial dir_z}$：
+1. 分别展开求$\frac{\partial Loss}{\partial dir_x}$、$\frac{\partial Loss}{\partial dir_y}$、$\frac{\partial Loss}{\partial dir_z}$：
     
 $$
   \begin{aligned}
