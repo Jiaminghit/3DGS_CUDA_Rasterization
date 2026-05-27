@@ -576,33 +576,35 @@ $$
 
 * 现在需要求$\frac{\partial x_{ndc}}{\partial x_{3D}}$, $\frac{\partial y_{ndc}}{\partial x_{3D}}$, $\frac{\partial x_{ndc}}{\partial y_{3D}}$, $\frac{\partial y_{ndc}}{\partial y_{3D}}$, $\frac{\partial x_{ndc}}{\partial z_{3D}}$, $\frac{\partial y_{ndc}}{\partial z_{3D}}$
 > MP变换：
+> 
 > $$p_{hom} = P \cdot (x, y, z, 1)^T$$ 
 > $$p_x = P_{00}x + P_{01}y + P_{02}z + P_{03}$$  
 > $$p_y = P_{10}x + P_{11}y + P_{12}z + P_{13}$$  
 > $$p_w = P_{30}x + P_{31}y + P_{32}z + P_{33}$$  
 
-$$
-\begin{aligned}
-\frac{\partial x_{ndc}}{\partial x} &= \frac{\partial (\frac{p_x}{p_w})}{\partial x}
-&= \frac{1}{p_w}\frac{\partial p_x}{\partial x} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial x} 
-&= \frac{P_{00}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{30} \\
-\frac{\partial y_{ndc}}{\partial x} &= \frac{\partial (\frac{p_y}{p_w})}{\partial x}
-&= \frac{1}{p_w}\frac{\partial p_y}{\partial x} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial x} 
-&= \frac{P_{10}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{30} \\
-\frac{\partial x_{ndc}}{\partial y} &= \frac{\partial (\frac{p_x}{p_w})}{\partial y}
-&= \frac{1}{p_w}\frac{\partial p_x}{\partial y} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial y} 
-&= \frac{P_{01}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{31} \\
-\frac{\partial y_{ndc}}{\partial y} &= \frac{\partial (\frac{p_y}{p_w})}{\partial y}
-&= \frac{1}{p_w}\frac{\partial p_y}{\partial y} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial y} 
-&= \frac{P_{11}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{31} \\
-\frac{\partial x_{ndc}}{\partial z} &= \frac{\partial (\frac{p_x}{p_w})}{\partial z}
-&= \frac{1}{p_w}\frac{\partial p_x}{\partial z} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial z} 
-&= \frac{P_{02}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{32} \\
-\frac{\partial y_{ndc}}{\partial z} &= \frac{\partial (\frac{p_y}{p_w})}{\partial z}
-&= \frac{1}{p_w}\frac{\partial p_y}{\partial z} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial z} 
-&= \frac{P_{12}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{32} \\
-\end{aligned}
-$$
+
+  $$
+    \begin{aligned}
+    \frac{\partial x_{ndc}}{\partial x} &= \frac{\partial (\frac{p_x}{p_w})}{\partial x}
+    &= \frac{1}{p_w}\frac{\partial p_x}{\partial x} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial x} 
+    &= \frac{P_{00}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{30} \\
+    \frac{\partial y_{ndc}}{\partial x} &= \frac{\partial (\frac{p_y}{p_w})}{\partial x}
+    &= \frac{1}{p_w}\frac{\partial p_y}{\partial x} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial x} 
+    &= \frac{P_{10}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{30} \\
+    \frac{\partial x_{ndc}}{\partial y} &= \frac{\partial (\frac{p_x}{p_w})}{\partial y}
+    &= \frac{1}{p_w}\frac{\partial p_x}{\partial y} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial y} 
+    &= \frac{P_{01}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{31} \\
+    \frac{\partial y_{ndc}}{\partial y} &= \frac{\partial (\frac{p_y}{p_w})}{\partial y}
+    &= \frac{1}{p_w}\frac{\partial p_y}{\partial y} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial y} 
+    &= \frac{P_{11}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{31} \\
+    \frac{\partial x_{ndc}}{\partial z} &= \frac{\partial (\frac{p_x}{p_w})}{\partial z}
+    &= \frac{1}{p_w}\frac{\partial p_x}{\partial z} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial z} 
+    &= \frac{P_{02}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{32} \\
+    \frac{\partial y_{ndc}}{\partial z} &= \frac{\partial (\frac{p_y}{p_w})}{\partial z}
+    &= \frac{1}{p_w}\frac{\partial p_y}{\partial z} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial z} 
+    &= \frac{P_{12}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{32} \\
+    \end{aligned}
+  $$
 
 * 最后全部代入全导数公式即可：
 
