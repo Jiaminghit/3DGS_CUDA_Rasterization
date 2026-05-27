@@ -603,13 +603,13 @@ $$
 ##### 后半阶段,分别求$\frac{\partial Loss}{\partial r}$、$\frac{\partial Loss}{\partial x}$、$\frac{\partial Loss}{\partial y}$、$\frac{\partial Loss}{\partial z}$
 * 旋转四元数$q = [r, x, y, z]$与旋转矩阵$R$的映射关系：
   
-  $$ 
+$$ 
   R(q) = \begin{bmatrix}
     1 - 2(y^2 + z^2) & 2(xy - zr) & 2(xz + yr) \\
     2(xy + zr) & 1-2(x^2+z^2) & 2(yz - xr) \\
     2(xz - yr) & 2(yz + xr) & 1 - 2(x^2 + y^2)
   \end{bmatrix}
-  $$
+$$
 
 * 刚刚求出的误差对旋转矩阵的梯度矩阵：
 
@@ -655,7 +655,7 @@ $$
     \end{aligned}
 $$
 
-* 现在需要求$\frac{\partial x_{ndc}}{\partial x_{3D}}$, $\frac{\partial y_{ndc}}{\partial x_{3D}}$, $\frac{\partial x_{ndc}}{\partial y_{3D}}$, $\frac{\partial y_{ndc}}{\partial y_{3D}}$, $\frac{\partial x_{ndc}}{\partial z_{3D}}$, $\frac{\partial y_{ndc}}{\partial z_{3D}}$
+* 现在需要求 $\frac{\partial x_{ndc}}{\partial x_{3D}}$, $\frac{\partial y_{ndc}}{\partial x_{3D}}$, $\frac{\partial x_{ndc}}{\partial y_{3D}}$, $\frac{\partial y_{ndc}}{\partial y_{3D}}$, $\frac{\partial x_{ndc}}{\partial z_{3D}}$, $\frac{\partial y_{ndc}}{\partial z_{3D}}$
 
 > MP变换：
 > 
