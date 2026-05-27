@@ -228,12 +228,12 @@
   $$
   * 协方差矩阵：
   
-  $$\begin{equation}
+  $$
     \begin{aligned}
       \Sigma_{3D} &= M^TM \\ &= (SR)^T(SR)\\ &=R^TS^TSR
     \end{aligned}
-  \end{equation}
   $$ 
+  
   2. 从**3D协方差到2D协方差**的**EWA Splat**的过程：
   * Jacobi矩阵：
   
@@ -576,6 +576,13 @@ $$
 
 * 现在需要求$\frac{\partial x_{ndc}}{\partial x_{3D}}$, $\frac{\partial y_{ndc}}{\partial x_{3D}}$, $\frac{\partial x_{ndc}}{\partial y_{3D}}$, $\frac{\partial y_{ndc}}{\partial y_{3D}}$, $\frac{\partial x_{ndc}}{\partial z_{3D}}$, $\frac{\partial y_{ndc}}{\partial z_{3D}}$
 
+> MP变换：
+> 
+> $$p_{hom} = P \cdot (x, y, z, 1)^T$$ 
+> $$p_x = P_{00}x + P_{01}y + P_{02}z + P_{03}$$  
+> $$p_y = P_{10}x + P_{11}y + P_{12}z + P_{13}$$  
+> $$p_w = P_{30}x + P_{31}y + P_{32}z + P_{33}$$ 
+
 $$
     \begin{aligned}
         \frac{\partial x_{ndc}}{\partial x} = \frac{\partial (\frac{p_x}{p_w})}{\partial x}
@@ -598,13 +605,6 @@ $$
         = \frac{P_{12}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{32} \\
     \end{aligned}
 $$
-
-> MP变换：
-> 
-> $$p_{hom} = P \cdot (x, y, z, 1)^T$$ 
-> $$p_x = P_{00}x + P_{01}y + P_{02}z + P_{03}$$  
-> $$p_y = P_{10}x + P_{11}y + P_{12}z + P_{13}$$  
-> $$p_w = P_{30}x + P_{31}y + P_{32}z + P_{33}$$ 
 
 
 * 最后全部代入全导数公式即可：
