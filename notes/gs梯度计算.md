@@ -34,17 +34,17 @@
       \end{aligned}
       $$
 
-  1. **高斯指数部分 ```(Power / G)```：** 利用 2D 协方差矩阵的逆（即 conic2D，包含三个独立元素 $\Sigma^{-1}_{11}, \Sigma^{-1}_{12}, \Sigma^{-1}_{22}$）计算马氏距离的负半值。
+  2. **高斯指数部分 ```(Power / G)```：** 利用 2D 协方差矩阵的逆（即 conic2D，包含三个独立元素 $\Sigma^{-1}_{11}, \Sigma^{-1}_{12}, \Sigma^{-1}_{22}$）计算马氏距离的负半值。
     
-      $$
+      ```math
       \begin{aligned}
         Power &= -\frac{1}{2} (X - \mu)^T \Sigma^{-1} (X - \mu) \\
               &= -0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2 \\
               &= -0.5 \cdot \Sigma^{-1}_{11} \cdot (x - \mu_x)^2 - \Sigma^{-1}_{12} \cdot (x - \mu_x) \cdot (y - \mu_y) - 0.5 \cdot \Sigma^{-1}_{22} \cdot (y - \mu_y)^2
       \end{aligned}
-      $$
+      ```
 
-  2. **当前层的最终 Alpha ($\alpha_i$)：** 由基础不透明度（opacity）乘上高斯衰减。
+  3. **当前层的最终 Alpha ($\alpha_i$)：** 由基础不透明度（opacity）乘上高斯衰减。
     
       $$
       \begin{aligned}
@@ -52,7 +52,7 @@
       \end{aligned}
       $$   
     
-  3. **Alpha 混合与透射率 (Alpha-compositing)：** 设 $T_i$ 为光线到达第 $i$ 个高斯球时的累积透射率（即背景光还能透过多少，初始为 1）。最终像素颜色:
+  4. **Alpha 混合与透射率 (Alpha-compositing)：** 设 $T_i$ 为光线到达第 $i$ 个高斯球时的累积透射率（即背景光还能透过多少，初始为 1）。最终像素颜色:
 
       $$
       \begin{aligned}
