@@ -723,145 +723,145 @@ $$
     \end{aligned}
 > $$
 * 由于这里3D均值通过影响归一化视角方向$\text{dir}$从而间接影响了RGB颜色，所以我们应该先利用**全导数法则**求$\frac{\partial Loss}{\partial \text{dir}}$:
-    1. 首先明确归一化视角：
+1. 首先明确归一化视角：
     
-    $$
-        \begin{aligned}
-            dir &= (dir_x, dir_y, dir_z) = \left( \frac{x'}{d}, \frac{y'}{d}, \frac{z'}{d} \right) \\
-            &= \left( \frac{x'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{y'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{z'}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \right) \\
-            &=  \left(\frac{x - c_x}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{y - c_y}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{z - c_z}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}} \right)
-        \end{aligned}
-    $$
-    2. 分别展开求$\frac{\partial Loss}{\partial dir_x}$、$\frac{\partial Loss}{\partial dir_y}$、$\frac{\partial Loss}{\partial dir_z}$：
+$$
+   \begin{aligned}
+       dir &= (dir_x, dir_y, dir_z) = \left( \frac{x'}{d}, \frac{y'}{d}, \frac{z'}{d} \right) \\
+       &= \left( \frac{x'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{y'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{z'}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \right) \\
+       &=  \left(\frac{x - c_x}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{y - c_y}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{z - c_z}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}} \right)
+   \end{aligned}
+$$
+2. 分别展开求$\frac{\partial Loss}{\partial dir_x}$、$\frac{\partial Loss}{\partial dir_y}$、$\frac{\partial Loss}{\partial dir_z}$：
     
-    $$
-        \begin{aligned}
-            \frac{\partial Loss}{\partial x_{dir}} &= \frac{\partial Loss}{\partial Color_{RGB}} \cdot \frac{\partial Color_{RGB}}{\partial x_{dir}} \\
-            &= \sum_{channel \in \{R,G,B\}} \frac{\partial Loss}{\partial Color_{channel}} \cdot \frac{\partial Color_{raw}}{\partial x} \\
-            \frac{\partial Loss}{\partial y_{dir}} &= \frac{\partial Loss}{\partial Color_{RGB}} \cdot \frac{\partial Color_{RGB}}{\partial y_{dir}} \\
-            &= \sum_{channel \in \{R,G,B\}} \frac{\partial Loss}{\partial Color_{channel}} \cdot \frac{\partial Color_{raw}}{\partial y} \\
-            \frac{\partial Loss}{\partial z_{dir}} &= \frac{\partial Loss}{\partial Color_{RGB}} \cdot \frac{\partial Color_{RGB}}{\partial z_{dir}} \\
-            &= \sum_{channel \in \{R,G,B\}} \frac{\partial Loss}{\partial Color_{channel}} \cdot \frac{\partial Color_{raw}}{\partial z}
-        \end{aligned}
-    $$
+$$
+  \begin{aligned}
+      \frac{\partial Loss}{\partial x_{dir}} &= \frac{\partial Loss}{\partial Color_{RGB}} \cdot \frac{\partial Color_{RGB}}{\partial x_{dir}} \\
+      &= \sum_{channel \in \{R,G,B\}} \frac{\partial Loss}{\partial Color_{channel}} \cdot \frac{\partial Color_{raw}}{\partial x} \\
+      \frac{\partial Loss}{\partial y_{dir}} &= \frac{\partial Loss}{\partial Color_{RGB}} \cdot \frac{\partial Color_{RGB}}{\partial y_{dir}} \\
+      &= \sum_{channel \in \{R,G,B\}} \frac{\partial Loss}{\partial Color_{channel}} \cdot \frac{\partial Color_{raw}}{\partial y} \\
+      \frac{\partial Loss}{\partial z_{dir}} &= \frac{\partial Loss}{\partial Color_{RGB}} \cdot \frac{\partial Color_{RGB}}{\partial z_{dir}} \\
+      &= \sum_{channel \in \{R,G,B\}} \frac{\partial Loss}{\partial Color_{channel}} \cdot \frac{\partial Color_{raw}}{\partial z}
+  \end{aligned}
+$$
 
-    3. 合并得到$\frac{\partial Loss}{\partial \text{dir}}$：
+3. 合并得到$\frac{\partial Loss}{\partial \text{dir}}$：
     
-    $$
-    \frac{\partial Loss}{\partial \text{dir}} = 
-    \begin{bmatrix}
-        \frac{\partial Loss}{\partial x_{dir}} \\
-        \frac{\partial Loss}{\partial y_{dir}} \\
-        \frac{\partial Loss}{\partial z_{dir}}
-    \end{bmatrix}
-    $$
+$$
+\frac{\partial Loss}{\partial \text{dir}} = 
+\begin{bmatrix}
+  \frac{\partial Loss}{\partial x_{dir}} \\
+  \frac{\partial Loss}{\partial y_{dir}} \\
+  \frac{\partial Loss}{\partial z_{dir}}
+\end{bmatrix}
+$$
 
 * 下一步求$\frac{\partial dir}{\partial \mu_{gaussian3d}}$ ，由于相机坐标 $cam_{pos} = (c_x, c_y, c_z)$ 是一个常数，所以对$\mu_{gaussian3d}$就等于对$(x', y', z') = (x - c_x, y - c_y, z - c_z)$求导：
     
-    $$
-        \begin{aligned}
-            \Delta &= \mu_{gaussian3d} - cam\_pos =  (x - c_x, y - c_y, z - c_z) = (x', y', z') \\
-            \because dir &= \frac{\Delta}{d}  = \frac{\Delta}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \\
-            \frac{\partial dir}{\partial \mu_{gaussian3d}} = \frac{\partial dir}{\partial \Delta}
-                &= \begin{bmatrix}
-                    \frac{\partial dir_x}{\partial x'} & \frac{\partial dir_x}{\partial y'} & \frac{\partial dir_x}{\partial z'} \\
-                    \frac{\partial dir_y}{\partial x'} & \frac{\partial dir_y}{\partial y'} & \frac{\partial dir_y}{\partial z'} \\
-                    \frac{\partial dir_z}{\partial x'} & \frac{\partial dir_z}{\partial y'} & \frac{\partial dir_z}{\partial z'}
-                \end{bmatrix}
-                = \begin{bmatrix}
-                \frac{1}{d} - \frac{(x')^2}{d^3} & -\frac{x' y'}{d^3} & -\frac{x' z'}{d^3} \\
-                -\frac{x' y'}{d^3} & \frac{1}{d} - \frac{(y')^2}{d^3} & -\frac{y' z'}{d^3} \\
-                -\frac{x' z'}{d^3} & -\frac{y' z'}{d^3} & \frac{1}{d} - \frac{(z')^2}{d^3}
-                \end{bmatrix} \\
-                &= \frac{1}{d} \left( I - \frac{\Delta \cdot \Delta^T}{d^2} \right) \\
-                &= \frac{1}{d} \left( I - dir \cdot dir^T \right)
-        \end{aligned}
-    $$
+$$
+    \begin{aligned}
+        \Delta &= \mu_{gaussian3d} - cam\_pos =  (x - c_x, y - c_y, z - c_z) = (x', y', z') \\
+        \because dir &= \frac{\Delta}{d}  = \frac{\Delta}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \\
+        \frac{\partial dir}{\partial \mu_{gaussian3d}} = \frac{\partial dir}{\partial \Delta}
+            &= \begin{bmatrix}
+                \frac{\partial dir_x}{\partial x'} & \frac{\partial dir_x}{\partial y'} & \frac{\partial dir_x}{\partial z'} \\
+                \frac{\partial dir_y}{\partial x'} & \frac{\partial dir_y}{\partial y'} & \frac{\partial dir_y}{\partial z'} \\
+                \frac{\partial dir_z}{\partial x'} & \frac{\partial dir_z}{\partial y'} & \frac{\partial dir_z}{\partial z'}
+            \end{bmatrix}
+            = \begin{bmatrix}
+            \frac{1}{d} - \frac{(x')^2}{d^3} & -\frac{x' y'}{d^3} & -\frac{x' z'}{d^3} \\
+            -\frac{x' y'}{d^3} & \frac{1}{d} - \frac{(y')^2}{d^3} & -\frac{y' z'}{d^3} \\
+            -\frac{x' z'}{d^3} & -\frac{y' z'}{d^3} & \frac{1}{d} - \frac{(z')^2}{d^3}
+            \end{bmatrix} \\
+            &= \frac{1}{d} \left( I - \frac{\Delta \cdot \Delta^T}{d^2} \right) \\
+            &= \frac{1}{d} \left( I - dir \cdot dir^T \right)
+    \end{aligned}
+$$
 
 * 最后利用矩阵的链式求导法则，得到:
   
-  $$
-    \begin{aligned}
-        \frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{颜色})
-        &= (\frac{\partial dir}{\partial \mu_{gaussian3d}})^T \cdot \frac{\partial Loss}{\partial \text{dir}} \\
-        &= \frac{1}{d} \left( I - dir \cdot dir^T \right) \cdot \frac{\partial Loss}{\partial \text{dir}} \\
-        &= \frac{1}{d} \left( v_{grad} - dir \cdot (dir^T \cdot \frac{\partial Loss}{\partial \text{dir}}) \right)
-    \end{aligned}
-  $$
+$$
+  \begin{aligned}
+      \frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{颜色})
+      &= (\frac{\partial dir}{\partial \mu_{gaussian3d}})^T \cdot \frac{\partial Loss}{\partial \text{dir}} \\
+      &= \frac{1}{d} \left( I - dir \cdot dir^T \right) \cdot \frac{\partial Loss}{\partial \text{dir}} \\
+      &= \frac{1}{d} \left( v_{grad} - dir \cdot (dir^T \cdot \frac{\partial Loss}{\partial \text{dir}}) \right)
+  \end{aligned}
+$$
 
 ##### 由$\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$求$\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{形状})$
 * 由于3D均值藏在 $J$ 矩阵中，所以需要根据 EWA Splatting 过程首先计算 $\frac{\partial Loss}{\partial J}$:
   
-  $$
-    \begin{aligned}
-        \because \Sigma_{2D} &= J W \Sigma_{3D} W^T J^T \\
-        \because t_{cam} &= (t_x, t_y, t_z) = W \cdot \mu_{gaussian3d} + t_{cam} \\
-        \text{设相机坐标系下的 3D 协方差:} \space
-        V &= W \Sigma_{3D} W^T \\
-        \Sigma_{2D} &= J \cdot V \cdot J^T = 
-        \begin{bmatrix}
-        \frac{f_x}{t_z} & 0 & -f_x \frac{t_x}{t_z^2} \\ 
-        0 & \frac{f_y}{t_z} & -f_y \frac{t_y}{t_z^2} \\ 
-        0 & 0 & 0
-        \end{bmatrix} \cdot V \cdot 
-        \begin{bmatrix}
-        \frac{f_x}{t_z} & 0 & -f_x \frac{t_x}{t_z^2} \\ 
-        0 & \frac{f_y}{t_z} & -f_y \frac{t_y}{t_z^2} \\ 
-        0 & 0 & 0
-        \end{bmatrix}^T \\
-        &= \begin{bmatrix}
-        \frac{f_x}{t_z} & 0 & -f_x \frac{t_x}{t_z^2} \\ 
-        0 & \frac{f_y}{t_z} & -f_y \frac{t_y}{t_z^2}
-        \end{bmatrix} \cdot V \cdot 
-        \begin{bmatrix}
-        \frac{f_x}{t_z} & 0 & -f_x \frac{t_x}{t_z^2} \\ 
-        0 & \frac{f_y}{t_z} & -f_y \frac{t_y}{t_z^2}
-        \end{bmatrix}^T \\
-        d\Sigma_{2D} &= d(J \cdot V) \cdot J^T + J \cdot V \cdot dJ^T \\
-        代入d(Loss) &= \text{tr}(\frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot d\Sigma_{gaussian2d}) = \text{tr}(\frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot (d(J \cdot V) \cdot J^T + J \cdot V \cdot dJ^T)) \\
-        &= 2 \text{tr}(V \cdot J^T \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot dJ) \\
-        \therefore \frac{\partial Loss}{\partial J} &= 2 \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot J \cdot V
-    \end{aligned}
-  $$
+$$
+  \begin{aligned}
+      \because \Sigma_{2D} &= J W \Sigma_{3D} W^T J^T \\
+      \because t_{cam} &= (t_x, t_y, t_z) = W \cdot \mu_{gaussian3d} + t_{cam} \\
+      \text{设相机坐标系下的 3D 协方差:} \space
+      V &= W \Sigma_{3D} W^T \\
+      \Sigma_{2D} &= J \cdot V \cdot J^T = 
+      \begin{bmatrix}
+      \frac{f_x}{t_z} & 0 & -f_x \frac{t_x}{t_z^2} \\ 
+      0 & \frac{f_y}{t_z} & -f_y \frac{t_y}{t_z^2} \\ 
+      0 & 0 & 0
+      \end{bmatrix} \cdot V \cdot 
+      \begin{bmatrix}
+      \frac{f_x}{t_z} & 0 & -f_x \frac{t_x}{t_z^2} \\ 
+      0 & \frac{f_y}{t_z} & -f_y \frac{t_y}{t_z^2} \\ 
+      0 & 0 & 0
+      \end{bmatrix}^T \\
+      &= \begin{bmatrix}
+      \frac{f_x}{t_z} & 0 & -f_x \frac{t_x}{t_z^2} \\ 
+      0 & \frac{f_y}{t_z} & -f_y \frac{t_y}{t_z^2}
+      \end{bmatrix} \cdot V \cdot 
+      \begin{bmatrix}
+      \frac{f_x}{t_z} & 0 & -f_x \frac{t_x}{t_z^2} \\ 
+      0 & \frac{f_y}{t_z} & -f_y \frac{t_y}{t_z^2}
+      \end{bmatrix}^T \\
+      d\Sigma_{2D} &= d(J \cdot V) \cdot J^T + J \cdot V \cdot dJ^T \\
+      代入d(Loss) &= \text{tr}(\frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot d\Sigma_{gaussian2d}) = \text{tr}(\frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot (d(J \cdot V) \cdot J^T + J \cdot V \cdot dJ^T)) \\
+      &= 2 \text{tr}(V \cdot J^T \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot dJ) \\
+      \therefore \frac{\partial Loss}{\partial J} &= 2 \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot J \cdot V
+  \end{aligned}
+$$
 
 > 这里用到了矩阵求导第一性原理：
 > 
 > $$d(Loss) = \text{tr}\left( \left(\frac{\partial Loss}{\partial X}\right)^T dX \right)$$
 * 从$\frac{\partial Loss}{\partial J}$ 回退到 $\frac{\partial Loss}{\partial (t_x, t_y, t_z)}$(相机坐标系下的3D均值)：
   
-  $$
-    \begin{aligned}
-        令G_J &= \frac{\partial Loss}{\partial J} = 2 \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot J \cdot V \\
-        \frac{\partial J}{\partial t_x} &=  
-        \begin{bmatrix}
-            0 & 0 & -\frac{f_x}{t_z^2} \\
-            0 & 0 & 0 \\
-            0 & 0 & 0
-        \end{bmatrix} = \frac{\partial J_{02}}{\partial t_x}\\
-        \frac{\partial J}{\partial t_y} &=  
-        \begin{bmatrix}
-            0 & 0 & 0 \\
-            0 & 0 & -\frac{f_y}{t_z^2} \\
-            0 & 0 & 0
-        \end{bmatrix} = \frac{\partial J_{12}}{\partial t_x}\\
-        \frac{\partial J}{\partial t_z} &=  
-        \begin{bmatrix}
-            -\frac{f_x}{t_z^2} & 0 & 2\frac{f_x \cdot t_x}{t_z^3} \\
-            0 & -\frac{f_y}{t_z^2} & 2\frac{f_y \cdot t_y}{t_z^3} \\
-            0 & 0 & 0
-        \end{bmatrix} \\
-        \therefore \frac{\partial Loss}{\partial t_x} &= G_{J}^{02} \cdot \frac{\partial J_{02}}{\partial t_x} = G_{J}^{02} \cdot \left( -\frac{f_x}{t_z^2} \right) \\
-        \frac{\partial Loss}{\partial t_y} &= G_{J}^{12} \cdot \frac{\partial J_{12}}{\partial t_y} = G_{J}^{12} \cdot \left( -\frac{f_y}{t_z^2} \right) \\
-        \frac{\partial Loss}{\partial t_z} &= G_{J}^{00} \frac{\partial J_{00}}{\partial t_z} + G_{J}^{11} \frac{\partial J_{11}}{\partial t_z} + G_{J}^{02} \frac{\partial J_{02}}{\partial t_z} + G_{J}^{12} \frac{\partial J_{12}}{\partial t_z} \\
-        &= G_{J}^{00}\left(-\frac{f_x}{t_z^2}\right) + G_{J}^{11}\left(-\frac{f_y}{t_z^2}\right) + G_{J}^{02}\left(\frac{2 f_x t_x}{t_z^3}\right) + G_{J}^{12}\left(\frac{2 f_y t_y}{t_z^3}\right)
-    \end{aligned}
-  $$
+$$
+  \begin{aligned}
+      令G_J &= \frac{\partial Loss}{\partial J} = 2 \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot J \cdot V \\
+      \frac{\partial J}{\partial t_x} &=  
+      \begin{bmatrix}
+          0 & 0 & -\frac{f_x}{t_z^2} \\
+          0 & 0 & 0 \\
+          0 & 0 & 0
+      \end{bmatrix} = \frac{\partial J_{02}}{\partial t_x}\\
+      \frac{\partial J}{\partial t_y} &=  
+      \begin{bmatrix}
+          0 & 0 & 0 \\
+          0 & 0 & -\frac{f_y}{t_z^2} \\
+          0 & 0 & 0
+      \end{bmatrix} = \frac{\partial J_{12}}{\partial t_x}\\
+      \frac{\partial J}{\partial t_z} &=  
+      \begin{bmatrix}
+          -\frac{f_x}{t_z^2} & 0 & 2\frac{f_x \cdot t_x}{t_z^3} \\
+          0 & -\frac{f_y}{t_z^2} & 2\frac{f_y \cdot t_y}{t_z^3} \\
+          0 & 0 & 0
+      \end{bmatrix} \\
+      \therefore \frac{\partial Loss}{\partial t_x} &= G_{J}^{02} \cdot \frac{\partial J_{02}}{\partial t_x} = G_{J}^{02} \cdot \left( -\frac{f_x}{t_z^2} \right) \\
+      \frac{\partial Loss}{\partial t_y} &= G_{J}^{12} \cdot \frac{\partial J_{12}}{\partial t_y} = G_{J}^{12} \cdot \left( -\frac{f_y}{t_z^2} \right) \\
+      \frac{\partial Loss}{\partial t_z} &= G_{J}^{00} \frac{\partial J_{00}}{\partial t_z} + G_{J}^{11} \frac{\partial J_{11}}{\partial t_z} + G_{J}^{02} \frac{\partial J_{02}}{\partial t_z} + G_{J}^{12} \frac{\partial J_{12}}{\partial t_z} \\
+      &= G_{J}^{00}\left(-\frac{f_x}{t_z^2}\right) + G_{J}^{11}\left(-\frac{f_y}{t_z^2}\right) + G_{J}^{02}\left(\frac{2 f_x t_x}{t_z^3}\right) + G_{J}^{12}\left(\frac{2 f_y t_y}{t_z^3}\right)
+  \end{aligned}
+$$
 * 由相机坐标系下的3D均值的梯度$\frac{\partial Loss}{\partial (t_x, t_y, t_z)}$回到世界坐标系下的均值的梯度 $\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{形状})$
   
-  $$
-    \begin{aligned}
-        &\because t_{cam} = (t_x, t_y, t_z) = W \cdot \mu_{gaussian3d} + t_{cam} \\
-        &\therefore \frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{形状}) = W^T \cdot \frac{\partial Loss}{\partial (t_x, t_y, t_z)}
-    \end{aligned}
-  $$
+$$
+  \begin{aligned}
+      &\because t_{cam} = (t_x, t_y, t_z) = W \cdot \mu_{gaussian3d} + t_{cam} \\
+      &\therefore \frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{形状}) = W^T \cdot \frac{\partial Loss}{\partial (t_x, t_y, t_z)}
+  \end{aligned}
+$$
 > 经历了千辛万苦推到了这里，然而```CUDA```代码中并没有考虑这一部分，可能是为了节省算力考虑吧 $\dots$
