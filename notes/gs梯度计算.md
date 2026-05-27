@@ -336,16 +336,19 @@
   🎨 最终颜色映射 (Final Result)将上述四个阶次的结果全部累加后，还需要进行最终的偏置和截断操作：$$Color_{raw} = C_{l=0} + C_{l=1} + C_{l=2} + C_{l=3} + 0.5$$$$Color_{final} = \max(Color_{raw}, 0.0)$$
 #### 求解1：球谐函数系数梯度 $\frac{\partial Loss}{\partial SH}$ (对应了preprocessCUDA核函数中的```dL_dsh```)
 由于球谐函数到颜色的映射是一个针对各颜色通道**独立计算**的多项式线性组合，加之最后有一个防止负数的截断操作 $\max(Color_{raw}, 0.0)$，我们可以利用**链式法则**直接对该多项式逐项求导。对于任意一个颜色通道（以 $Color_{channel}$ 代表 R, G 或 B 通道）的第 $i$ 个球谐系数 $sh[i]$，其链式求导路径为：
-$$\begin{equation}
+
+$$
 \begin{aligned}
   Channel \space R : \frac{\partial Loss}{\partial sh[i]} &= \frac{\partial Loss}{\partial Color_{final}} \cdot \frac{\partial Color_{final}}{\partial Color_{raw}} \cdot \frac{\partial Color_{raw}}{\partial sh[i]} \\
   &= \frac{\partial Loss}{\partial R_{gaussian2d}} \cdot \mathbb{I}(Color_{raw} > 0) \cdot Y_i(dir) \\
   Channel \space G : \frac{\partial Loss}{\partial sh[i]} &= \frac{\partial Loss}{\partial G_{gaussian2d}} \cdot \mathbb{I}(Color_{raw} > 0) \cdot Y_i(dir) \\
   Channel \space B : \frac{\partial Loss}{\partial sh[i]} &= \frac{\partial Loss}{\partial B_{gaussian2d}} \cdot \mathbb{I}(Color_{raw} > 0) \cdot Y_i(dir)
 \end{aligned}
-\end{equation}$$
+$$
+
 由于 R、G、B 三个通道的球谐系数是完全独立的（每个通道各自拥有 16 个单独的 $sh$ 系数，总计 48 个），因此梯度计算无需跨通道累加。针对某单一通道的所有 16 个球谐系数梯度，可以表示为一个列向量：
-$$\begin{equation}
+
+$$
 \begin{aligned}
   \frac{\partial Loss}{\partial SH_{channel}} = \frac{\partial Loss}{\partial Color_{channel}} \cdot \mathbb{I}(Color_{raw} > 0) \cdot 
   \begin{bmatrix}
@@ -358,7 +361,8 @@ $$\begin{equation}
     C_{3,6} \cdot x(x^2 - 3y^2)
   \end{bmatrix}
 \end{aligned}
-\end{equation}$$
+$$
+
 #### 求解2：(中间过渡变量) 3D 协方差矩阵梯度 $\frac{\partial Loss}{\partial \Sigma_{3D}}$ (对应了preprocessCUDA核函数中的```dL_dcov3D```)
   **已知：** 我们手中已经有的是从render阶段反向传回的**2d协方差矩阵的逆矩阵的梯度** $\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} $
   > Q : 为什么这里是逆矩阵的梯度？
@@ -374,18 +378,28 @@ $$\begin{equation}
   
   但是在 GPU 核函数（computeCov2DCUDA）中，**线程处理 $2 \times 2$ 矩阵的乘法非常浪费寄存器**。所以作者把这个 $2 \times 2$ 的对称矩阵拆成了 3 个独立的标量来进行链式求导。
   设 2D 协方差矩阵 $ \Sigma_{2D} = \begin{bmatrix} a & b \\ b & c \end{bmatrix} $
-  $$\begin{equation}
+  
+  $$
     \begin{aligned}
       \Sigma_{2D}^{-1} &= \frac{1}{det} \begin{bmatrix} c & -b \\ -b & a \end{bmatrix} \\ 
       &= \begin{bmatrix} \frac{c}{ac - b^2} & \frac{-b}{ac - b^2} \\ \frac{-b}{ac - b^2} & \frac{a}{ac - b^2} \end{bmatrix} \\
       &= \begin{bmatrix} c_x & c_y \\ c_y & c_z \end{bmatrix}
     \end{aligned}
-  \end{equation}
   $$  
+
   故有对应关系为：
-  $$c_x = \frac{c}{a \cdot c - b^2}$$ $$c_y = \frac{-b}{a \cdot c - b^2}$$ $$c_z = \frac{a}{a \cdot c - b^2}$$
+  
   $$
-  \begin{equation}
+  c_x = \frac{c}{a \cdot c - b^2}
+  $$ 
+  $$
+  c_y = \frac{-b}{a \cdot c - b^2}
+  $$ 
+  $$
+  c_z = \frac{a}{a \cdot c - b^2}
+  $$
+  
+  $$
     \begin{aligned}
       \frac{\partial c_x}{\partial a} &= \frac{0 \cdot det - c \cdot (c)}{det^2} = -\frac{c^2}{det^2} = -(c_x)^2 \\
       \frac{\partial c_y}{\partial a} &= \frac{0 \cdot det - (-b) \cdot (c)}{det^2} = \frac{b \cdot c}{det^2} = -(\frac{c}{det} \cdot \frac{-b}{det}) = -c_x \cdot c_y \\
@@ -397,10 +411,11 @@ $$\begin{equation}
       \frac{\partial c_y}{\partial c} &= \frac{0 \cdot det - a\cdot(-b)}{det^2} = -c_y \cdot c_z \\
       \frac{\partial c_z}{\partial c} &= \frac{0 \cdot det - a \cdot a}{det^2} = - 2\frac{a}{det} \cdot \frac{a}{det}= - c_z^2
     \end{aligned}
-  \end{equation}
   $$
+
   将损失函数对于矩阵的导数转化成为其对于矩阵元素的导数，进而将矩阵的链导法则转化为标量的链导法则：
-  $$\begin{equation}
+  
+  $$
     \begin{aligned}
       \frac{\partial Loss}{\partial \Sigma_{gaussian2d}} &= \begin{bmatrix}
         \frac{\partial Loss}{\partial a} & \frac{\partial Loss}{\partial b} \\
@@ -419,16 +434,19 @@ $$\begin{equation}
         \frac{\partial L}{\partial c_x} \cdot (- c_y^2) + \frac{\partial L}{\partial c_y} \cdot (-c_y \cdot c_z ) + \frac{\partial L}{\partial c_z} \cdot (- c_z^2)
       \end{bmatrix}
     \end{aligned}
-  \end{equation}
   $$
   > $\frac{\partial L}{\partial c_x} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$ 矩阵的左上角元素 
-  $\frac{\partial L}{\partial c_y} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$ 矩阵的右上角元素 \ 左下角元素
-  $\frac{\partial L}{\partial c_z} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$ 矩阵的右下角元素
+  > $\frac{\partial L}{\partial c_y} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$ 矩阵的右上角元素 \ 左下角元素
+  > $\frac{\partial L}{\partial c_z} = \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$ 矩阵的右下角元素
 
-##### 第二步：从 2D高斯 回退到 3D高斯 **($\frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \rightarrow \frac{\partial Loss}{\partial \Sigma_{gaussian3d}}$)**
-  由于：$$\Sigma_{gaussian2d} = T \Sigma_{gaussian3d} T^T = J \cdot W \cdot \Sigma_{gaussian3d} \cdot W^T \cdot J^T$$
+##### 第二步：从 2D高斯 回退到 3D高斯 ($\frac{\partial Loss}{\partial \Sigma_{gaussian2d}}\rightarrow\frac{\partial Loss}{\partial \Sigma_{gaussian3d}}$)
+  由于：
+  $$
+  \Sigma_{gaussian2d} = T \Sigma_{gaussian3d} T^T = J \cdot W \cdot \Sigma_{gaussian3d} \cdot W^T \cdot J^T
+  $$
   根据矩阵微分的 Trace ：
-  $$\begin{equation}
+  
+  $$
     \begin{aligned}
       \frac{\partial Loss}{\partial \Sigma_{gaussian3d}} &= T^T \frac{\partial L}{\partial \Sigma_{gaussian2d}} T \\
       &= W^T \cdot J^T \cdot \frac{\partial L}{\partial \Sigma_{gaussian2d}} J \cdot W \\
@@ -438,13 +456,14 @@ $$\begin{equation}
         0 & 0 & 0
       \end{bmatrix} \cdot J  \cdot T
     \end{aligned}
-  \end{equation}
   $$
+
   > 上式中都是$3 \times 3$的矩阵
 #### 求解3：3D 缩放梯度 $\frac{\partial Loss}{\partial S}$ 
 > ❗注意矩阵求导不能简单用标量的链导法则解决，其应遵循**全微分（Differential）和迹（Trace）技巧**。矩阵求导只有一个核心第一性原理：$$d(Loss) = \text{tr}\left( \left(\frac{\partial Loss}{\partial X}\right)^T dX \right)$$只要你能把等式右边凑成 $\text{tr}(\text{某矩阵}^T \cdot dX)$ 的形式，那个“某矩阵”就是完美的梯度！
 ##### 前半阶段：求$\frac{\partial Loss}{\partial M}$
-  $$\begin{equation}
+  
+  $$
     \begin{aligned}
       已知:\\
       \Sigma_{gaussian3d} &= M^T \cdot M \\ 
@@ -467,10 +486,11 @@ $$\begin{equation}
       \pmb{\frac{\partial Loss}{\partial M}} &= 2 \cdot M \cdot (\frac{\partial Loss}{\partial \Sigma_{gaussian3d}})^T \\
       &= \pmb{2 \cdot M \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}}} \\      
     \end{aligned}
-  \end{equation}
   $$
+
 ##### 后半阶段：求$\frac{\partial Loss}{\partial S}$
-  $$\begin{equation}
+  
+  $$
     \begin{aligned}
       已知:\\
       M &= S \cdot R \\
@@ -485,13 +505,14 @@ $$\begin{equation}
       \frac{\partial Loss}{\partial S} &= \frac{\partial Loss}{\partial M} \cdot R^T = 2 \cdot M \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}} \cdot R^T \\
       &= 2 \cdot S \cdot R \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}} \cdot R^T      
     \end{aligned}
-  \end{equation}
   $$
+
 ##### 最后一步
   这里的缩放因子矩阵$S$是一个对角矩阵$S = \text{diag}(s_x, s_y, s_z)$。所以，我们只需要提取上述结果矩阵的主对角线元素即可，即 $$\frac{\partial Loss}{\partial S} = \text{diag}(2 \cdot S \cdot R \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}} \cdot R^T)$$
 #### 求解4：3D 旋转梯度 $\frac{\partial Loss}{\partial q}$
 ##### 前半阶段，借助上一段求解出来的$\frac{\partial Loss}{\partial M}$求$\frac{\partial Loss}{\partial R}$：
-  $$\begin{equation}
+
+  $$
     \begin{aligned}
       已知:\\
       M &= S \cdot R \\
@@ -506,54 +527,58 @@ $$\begin{equation}
       \frac{\partial Loss}{\partial R} &= S^T \cdot \frac{\partial Loss}{\partial M} = S^T \cdot 2 \cdot M \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}} \\
       &= S \cdot 2 \cdot S \cdot R \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}}   
     \end{aligned}
-  \end{equation}
   $$
+
 ##### 后半阶段,分别求$\frac{\partial Loss}{\partial r}$、$\frac{\partial Loss}{\partial x}$、$\frac{\partial Loss}{\partial y}$、$\frac{\partial Loss}{\partial z}$
 * 旋转四元数$q = [r, x, y, z]$与旋转矩阵$R$的映射关系：
-  $$ R(q) = \begin{bmatrix}
+  
+  $$ 
+  R(q) = \begin{bmatrix}
     1 - 2(y^2 + z^2) & 2(xy - zr) & 2(xz + yr) \\
     2(xy + zr) & 1-2(x^2+z^2) & 2(yz - xr) \\
     2(xz - yr) & 2(yz + xr) & 1 - 2(x^2 + y^2)
   \end{bmatrix}
   $$
+
 * 刚刚求出的误差对旋转矩阵的梯度矩阵：$$U = \frac{\partial Loss}{\partial R} = S \cdot 2 \cdot S \cdot R \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian3d}} $$
 * 根据标量对矩阵求导的链式法则（Frobenius 内积），可以分别求出：
-  $$\begin{equation}
+  
+  $$
     \begin{aligned}
       \frac{\partial Loss}{\partial r} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial r} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial r} \\
       \frac{\partial Loss}{\partial x} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial x} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial x} \\
       \frac{\partial Loss}{\partial y} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial y} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial y} \\
       \frac{\partial Loss}{\partial z} &= \sum_{i=1}^3 \sum_{j=1}^3 \frac{\partial Loss}{\partial R_{ij}} \cdot \frac{\partial R_{ij}}{\partial z} &= \sum_{i=1}^3 \sum_{j=1}^3 U_{ij} \cdot \frac{\partial R_{ij}}{\partial z}
     \end{aligned}
-  \end{equation}
   $$
   
-  $$\begin{equation}
+  $$
     \begin{aligned}
       \frac{\partial Loss}{\partial r} &= 2 \cdot (x U_{23} - x U_{32} + y U_{31} - y U_{13} + z U_{12} - z U_{21}) \\
       \frac{\partial Loss}{\partial x} &= 2 \cdot (-2x U_{22} - 2x U_{33} + y U_{12} + y U_{21} + z U_{13} + z U_{31} + r U_{23} - r U_{32}) \\
       \frac{\partial Loss}{\partial y} &= 2 \cdot (x U_{12} + x U_{21} - 2y U_{11} - 2y U_{33} + z U_{23} + z U_{32} + r U_{31} - r U_{13}) \\
       \frac{\partial Loss}{\partial z} &= 2 \cdot (x U_{13} + x U_{31} + y U_{23} + y U_{32} - 2z U_{11} - 2z U_{22} + r U_{12} - r U_{21})
     \end{aligned}
-  \end{equation}
   $$
 
 #### 求解5：3D 均值梯度 $\frac{\partial L}{\partial \mu_{gaussian3d}}$
 3D均值(即3D高斯椭球球心)在前向传播中影响了三大模块：2D高斯的均值、颜色、2D高斯的协方差矩阵，所以其最终的梯度应该由三部分构成，形如$\frac{\partial Loss}{\partial \mu_{3D}} = \text{Grad}_{A} (\text{位置}) + \text{Grad}_{B} (\text{颜色}) + \text{Grad}_{C} (\text{形状})$
 ##### 由$\frac{\partial Loss}{\partial \mu_{gaussian2d}}$求$\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{位置})$
 * 首先，明确$\mu_{gaussian2d}$v不是在像素坐标系上而是在NDC坐标系上(```renderCUDA```部分已经进行了预处理)，所以现在的流程就是将NDC坐标系的梯度回传给世界坐标系。其次由于涉及到透视变换与可能存在的相机旋转，空间坐标系中任意一个方向的坐标变化($x$ 或 $y$ 或 $z$)都会引发NDC坐标系中$x$和$y$两个方向的变化，所以这里应该使用多元微分学中的**全导数公式**，即：
-$$\begin{equation}
+
+$$
     \begin{aligned}
         \frac{\partial Loss}{\partial x_{3D}} &= \frac{\partial Loss}{\partial x_{ndc}} \cdot \frac{\partial x_{ndc}}{\partial x_{3D}} + \frac{\partial Loss}{\partial y_{ndc}} \cdot \frac{\partial y_{ndc}}{\partial x_{3D}} \\
         \frac{\partial Loss}{\partial y_{3D}} &= \frac{\partial Loss}{\partial x_{ndc}} \cdot \frac{\partial x_{ndc}}{\partial y_{3D}} + \frac{\partial Loss}{\partial y_{ndc}} \cdot \frac{\partial y_{ndc}}{\partial y_{3D}} \\
         \frac{\partial Loss}{\partial z_{3D}} &= \frac{\partial Loss}{\partial x_{ndc}} \cdot \frac{\partial x_{ndc}}{\partial z_{3D}} + \frac{\partial Loss}{\partial y_{ndc}} \cdot \frac{\partial y_{ndc}}{\partial z_{3D}} 
     \end{aligned}
-\end{equation}
 $$
+
 * 现在需要求$\frac{\partial x_{ndc}}{\partial x_{3D}}$, $\frac{\partial y_{ndc}}{\partial x_{3D}}$, $\frac{\partial x_{ndc}}{\partial y_{3D}}$, $\frac{\partial y_{ndc}}{\partial y_{3D}}$, $\frac{\partial x_{ndc}}{\partial z_{3D}}$, $\frac{\partial y_{ndc}}{\partial z_{3D}}$
 > MP变换：$$p_{hom} = P \cdot (x, y, z, 1)^T$$ $$p_x = P_{00}x + P_{01}y + P_{02}z + P_{03}$$  $$p_y = P_{10}x + P_{11}y + P_{12}z + P_{13}$$  $$p_w = P_{30}x + P_{31}y + P_{32}z + P_{33}$$  
 
-$$\begin{aligned}
+$$
+\begin{aligned}
 \frac{\partial x_{ndc}}{\partial x} &= \frac{\partial (\frac{p_x}{p_w})}{\partial x}
 &= \frac{1}{p_w}\frac{\partial p_x}{\partial x} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial x} 
 &= \frac{P_{00}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{30} \\
@@ -572,9 +597,12 @@ $$\begin{aligned}
 \frac{\partial y_{ndc}}{\partial z} &= \frac{\partial (\frac{p_y}{p_w})}{\partial z}
 &= \frac{1}{p_w}\frac{\partial p_y}{\partial z} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial z} 
 &= \frac{P_{12}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{32} \\
-\end{aligned}$$
+\end{aligned}
+$$
+
 * 最后全部代入全导数公式即可：
-$$\begin{equation}
+
+$$
     \begin{aligned}
         \frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{位置}) = 
         \begin{bmatrix}
@@ -583,12 +611,11 @@ $$\begin{equation}
             \left( \frac{P_{02}}{p_w} - P_{32}\frac{p_x}{p_w^2} \right) \cdot \frac{\partial Loss}{\partial x_{ndc}} + \left( \frac{P_{12}}{p_w} - P_{32}\frac{p_y}{p_w^2} \right) \cdot \frac{\partial Loss}{\partial y_{ndc}}
         \end{bmatrix}
     \end{aligned}
-\end{equation}
 $$
 
 ##### 由$\frac{\partial Loss}{\partial RGB_{gaussian2d}} $求$\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{颜色})$
 > 回顾球谐函数
-> $$\begin{equation}
+> $$
     \begin{aligned}
         Color_{final} &= \max(Color_{raw}, 0.0) \\
         Color_{raw} &= C_{l=0} + C_{l=1} + C_{l=2} + C_{l=3} + 0.5 \\
@@ -607,20 +634,20 @@ $$
           &+ C_{3,5} \cdot z(x^2 - y^2) \cdot sh[14] \\
           &+ C_{3,6} \cdot x(x^2 - 3y^2) \cdot sh[15]
     \end{aligned}
-\end{equation}
 > $$
 * 由于这里3D均值通过影响归一化视角方向$\text{dir}$从而间接影响了RGB颜色，所以我们应该先利用**全导数法则**求$\frac{\partial Loss}{\partial \text{dir}}$:
     1. 首先明确归一化视角：
-    $$\begin{equation}
+    
+    $$
         \begin{aligned}
             dir &= (dir_x, dir_y, dir_z) = \left( \frac{x'}{d}, \frac{y'}{d}, \frac{z'}{d} \right) \\
             &= \left( \frac{x'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{y'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{z'}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \right) \\
             &=  \left(\frac{x - c_x}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{y - c_y}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{z - c_z}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}} \right)
         \end{aligned}
-    \end{equation}$$
-    2. 分别展开求$\frac{\partial Loss}{\partial dir_x}$、$\frac{\partial Loss}{\partial dir_y}$、$\frac{\partial Loss}{\partial dir_z}$：
     $$
-    \begin{equation}
+    2. 分别展开求$\frac{\partial Loss}{\partial dir_x}$、$\frac{\partial Loss}{\partial dir_y}$、$\frac{\partial Loss}{\partial dir_z}$：
+    
+    $$
         \begin{aligned}
             \frac{\partial Loss}{\partial x_{dir}} &= \frac{\partial Loss}{\partial Color_{RGB}} \cdot \frac{\partial Color_{RGB}}{\partial x_{dir}} \\
             &= \sum_{channel \in \{R,G,B\}} \frac{\partial Loss}{\partial Color_{channel}} \cdot \frac{\partial Color_{raw}}{\partial x} \\
@@ -629,9 +656,10 @@ $$
             \frac{\partial Loss}{\partial z_{dir}} &= \frac{\partial Loss}{\partial Color_{RGB}} \cdot \frac{\partial Color_{RGB}}{\partial z_{dir}} \\
             &= \sum_{channel \in \{R,G,B\}} \frac{\partial Loss}{\partial Color_{channel}} \cdot \frac{\partial Color_{raw}}{\partial z}
         \end{aligned}
-    \end{equation}
     $$
+
     3. 合并得到$\frac{\partial Loss}{\partial \text{dir}}$：
+    
     $$
     \frac{\partial Loss}{\partial \text{dir}} = 
     \begin{bmatrix}
@@ -640,8 +668,10 @@ $$
         \frac{\partial Loss}{\partial z_{dir}}
     \end{bmatrix}
     $$
+
 * 下一步求$\frac{\partial dir}{\partial \mu_{gaussian3d}}$ ，由于相机坐标 $cam_{pos} = (c_x, c_y, c_z)$ 是一个常数，所以对$\mu_{gaussian3d}$就等于对$(x', y', z') = (x - c_x, y - c_y, z - c_z)$求导：
-    $$\begin{equation}
+    
+    $$
         \begin{aligned}
             \Delta &= \mu_{gaussian3d} - cam\_pos =  (x - c_x, y - c_y, z - c_z) = (x', y', z') \\
             \because dir &= \frac{\Delta}{d}  = \frac{\Delta}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \\
@@ -659,22 +689,23 @@ $$
                 &= \frac{1}{d} \left( I - \frac{\Delta \cdot \Delta^T}{d^2} \right) \\
                 &= \frac{1}{d} \left( I - dir \cdot dir^T \right)
         \end{aligned}
-    \end{equation}
     $$
+
 * 最后利用矩阵的链式求导法则，得到:
-  $$\begin{equation}
+  
+  $$
     \begin{aligned}
         \frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{颜色})
         &= (\frac{\partial dir}{\partial \mu_{gaussian3d}})^T \cdot \frac{\partial Loss}{\partial \text{dir}} \\
         &= \frac{1}{d} \left( I - dir \cdot dir^T \right) \cdot \frac{\partial Loss}{\partial \text{dir}} \\
         &= \frac{1}{d} \left( v_{grad} - dir \cdot (dir^T \cdot \frac{\partial Loss}{\partial \text{dir}}) \right)
     \end{aligned}
-  \end{equation}
   $$
 
 ##### 由$\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$求$\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{形状})$
 * 由于3D均值藏在 $J$ 矩阵中，所以需要根据 EWA Splatting 过程首先计算 $\frac{\partial Loss}{\partial J}$:
-  $$\begin{equation}
+  
+  $$
     \begin{aligned}
         \because \Sigma_{2D} &= J W \Sigma_{3D} W^T J^T \\
         \because t_{cam} &= (t_x, t_y, t_z) = W \cdot \mu_{gaussian3d} + t_{cam} \\
@@ -704,11 +735,12 @@ $$
         &= 2 \text{tr}(V \cdot J^T \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot dJ) \\
         \therefore \frac{\partial Loss}{\partial J} &= 2 \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot J \cdot V
     \end{aligned}
-  \end{equation}
   $$
+
 > 这里用到了矩阵求导第一性原理：$$d(Loss) = \text{tr}\left( \left(\frac{\partial Loss}{\partial X}\right)^T dX \right)$$
 * 从$\frac{\partial Loss}{\partial J}$ 回退到 $\frac{\partial Loss}{\partial (t_x, t_y, t_z)}$(相机坐标系下的3D均值)：
-  $$\begin{equation}
+  
+  $$
     \begin{aligned}
         令G_J &= \frac{\partial Loss}{\partial J} = 2 \cdot \frac{\partial Loss}{\partial \Sigma_{gaussian2d}} \cdot J \cdot V \\
         \frac{\partial J}{\partial t_x} &=  
@@ -734,14 +766,13 @@ $$
         \frac{\partial Loss}{\partial t_z} &= G_{J}^{00} \frac{\partial J_{00}}{\partial t_z} + G_{J}^{11} \frac{\partial J_{11}}{\partial t_z} + G_{J}^{02} \frac{\partial J_{02}}{\partial t_z} + G_{J}^{12} \frac{\partial J_{12}}{\partial t_z} \\
         &= G_{J}^{00}\left(-\frac{f_x}{t_z^2}\right) + G_{J}^{11}\left(-\frac{f_y}{t_z^2}\right) + G_{J}^{02}\left(\frac{2 f_x t_x}{t_z^3}\right) + G_{J}^{12}\left(\frac{2 f_y t_y}{t_z^3}\right)
     \end{aligned}
-  \end{equation}
   $$
 * 由相机坐标系下的3D均值的梯度$\frac{\partial Loss}{\partial (t_x, t_y, t_z)}$回到世界坐标系下的均值的梯度 $\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{形状})$
-$$\begin{equation}
+  
+  $$
     \begin{aligned}
         &\because t_{cam} = (t_x, t_y, t_z) = W \cdot \mu_{gaussian3d} + t_{cam} \\
         &\therefore \frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{形状}) = W^T \cdot \frac{\partial Loss}{\partial (t_x, t_y, t_z)}
     \end{aligned}
-  \end{equation}
   $$
 > 经历了千辛万苦推到了这里，然而```CUDA```代码中并没有考虑这一部分，可能是为了节省算力考虑吧 $\dots$
