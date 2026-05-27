@@ -586,23 +586,23 @@ $$
   $$
     \begin{aligned}
     \frac{\partial x_{ndc}}{\partial x} &= \frac{\partial (\frac{p_x}{p_w})}{\partial x}
-    &= \frac{1}{p_w}\frac{\partial p_x}{\partial x} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial x} 
-    &= \frac{P_{00}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{30} \\
+    = \frac{1}{p_w}\frac{\partial p_x}{\partial x} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial x} 
+    = \frac{P_{00}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{30} \\
     \frac{\partial y_{ndc}}{\partial x} &= \frac{\partial (\frac{p_y}{p_w})}{\partial x}
-    &= \frac{1}{p_w}\frac{\partial p_y}{\partial x} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial x} 
-    &= \frac{P_{10}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{30} \\
+    = \frac{1}{p_w}\frac{\partial p_y}{\partial x} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial x} 
+    = \frac{P_{10}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{30} \\
     \frac{\partial x_{ndc}}{\partial y} &= \frac{\partial (\frac{p_x}{p_w})}{\partial y}
-    &= \frac{1}{p_w}\frac{\partial p_x}{\partial y} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial y} 
-    &= \frac{P_{01}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{31} \\
+    = \frac{1}{p_w}\frac{\partial p_x}{\partial y} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial y} 
+    = \frac{P_{01}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{31} \\
     \frac{\partial y_{ndc}}{\partial y} &= \frac{\partial (\frac{p_y}{p_w})}{\partial y}
-    &= \frac{1}{p_w}\frac{\partial p_y}{\partial y} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial y} 
-    &= \frac{P_{11}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{31} \\
+    = \frac{1}{p_w}\frac{\partial p_y}{\partial y} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial y} 
+    = \frac{P_{11}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{31} \\
     \frac{\partial x_{ndc}}{\partial z} &= \frac{\partial (\frac{p_x}{p_w})}{\partial z}
-    &= \frac{1}{p_w}\frac{\partial p_x}{\partial z} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial z} 
-    &= \frac{P_{02}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{32} \\
+    = \frac{1}{p_w}\frac{\partial p_x}{\partial z} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial z} 
+    = \frac{P_{02}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{32} \\
     \frac{\partial y_{ndc}}{\partial z} &= \frac{\partial (\frac{p_y}{p_w})}{\partial z}
-    &= \frac{1}{p_w}\frac{\partial p_y}{\partial z} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial z} 
-    &= \frac{P_{12}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{32} \\
+    = \frac{1}{p_w}\frac{\partial p_y}{\partial z} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial z} 
+    = \frac{P_{12}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{32} \\
     \end{aligned}
   $$
 
