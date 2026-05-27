@@ -413,21 +413,24 @@ $$
   > $$
   G(x) \propto \exp\left(-\frac{1}{2} (x - \mu)^T \Sigma_{2D}^{-1} (x - \mu)\right)
   $$ 
-  
+
   > 在 Rendering 的像素级循环中，我们要计算的是高斯衰减指数 Power。这个公式里天生自带的就是 $\Sigma_{2D}^{-1}$。如果我们求对 $\Sigma_{2D}$ 的梯度，在链式法则中就会多出求逆矩阵导数这一极其繁琐的步骤。**从工程角度看，求矩阵的逆是非常耗时的操作。** 如果每个像素在计算时都去对 $\Sigma_{2D}$ 求一次逆，GPU 会慢到无法忍受。因此，3DGS 在 preprocess 阶段，为每个高斯球计算好 $\Sigma_{2D}$ 后，立刻求逆，并把逆矩阵 $\Sigma_{2D}^{-1}$ 命名为 conic 保存下来。这样在渲染时，成千上万的像素只需要做简单的乘法和加法。
   
 ##### 第一步：从 逆矩阵 回退到 正矩阵 ($\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} \rightarrow \frac{\partial Loss}{\partial \Sigma_{gaussian2d}}$)
+  
   > **矩阵求导：**
   > 在矩阵微积分中，对于任意可逆对称矩阵 $A$，其逆矩阵的微分公式为：
   
   > $$
   d(A^{-1}) = -A^{-1} (dA) A^{-1}
   $$
+
   > 代入 $A = \Sigma_{2D}$，已知目标是根据链式法则求 $\frac{\partial L}{\partial \Sigma_{2D}}$。将上述微分公式代入多元微积分的迹（Trace）技巧中，可以非常快地得出协方差矩阵梯度的转换公式：
 
   > $$
   \frac{\partial L}{\partial \Sigma_{2D}} = - \Sigma_{2D}^{-1} \cdot \left( \frac{\partial L}{\partial \Sigma_{2D}^{-1}} \right) \cdot \Sigma_{2D}^{-1}
   $$
+  
   > **结论：** 误差对正矩阵的梯度，等于误差对逆矩阵的梯度在两边各乘一次逆矩阵，并反转方向。
   
   但是在 GPU 核函数（computeCov2DCUDA）中，**线程处理 $2 \times 2$ 矩阵的乘法非常浪费寄存器**。所以作者把这个 $2 \times 2$ 的对称矩阵拆成了 3 个独立的标量来进行链式求导。
