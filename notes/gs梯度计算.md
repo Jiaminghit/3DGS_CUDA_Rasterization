@@ -721,7 +721,7 @@ $$
           &+ C_{3,5} \cdot z(x^2 - y^2) \cdot sh[14] \\
           &+ C_{3,6} \cdot x(x^2 - 3y^2) \cdot sh[15]
     \end{aligned}
-> $$
+$$
 * 由于这里3D均值通过影响归一化视角方向$\text{dir}$从而间接影响了RGB颜色，所以我们应该先利用**全导数法则**求$\frac{\partial Loss}{\partial \text{dir}}$:
 1. 首先明确归一化视角：
     

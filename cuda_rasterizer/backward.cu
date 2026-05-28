@@ -515,7 +515,7 @@ renderCUDA(
 	// Gaussian is known from each pixel from the forward.
 	uint32_t contributor = toDo; // 这个像素前面一共有多少 gs splat 过来了
 	const int last_contributor = inside ? n_contrib[pix_id] : 0;
-
+	// 这里的 C 指通道数，一般为 3
 	float accum_rec[C] = { 0 };
 	float dL_dpixel[C];
 	float dL_invdepth;
@@ -539,19 +539,29 @@ renderCUDA(
 
 	// Gradient of pixel coordinate w.r.t. normalized 
 	// screen-space viewport corrdinates (-1 to 1)
+	// 从 NDC 坐标系 -> Pixel 坐标系
+	// u = (x + 1) * W / 2
+	// v = (y + 1) * H / 2
 	const float ddelx_dx = 0.5 * W;
 	const float ddely_dy = 0.5 * H;
 
+	// 从 vRAM 中读取高斯信息加载到 shared_memory 中
 	// Traverse all Gaussians
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
 		// Load auxiliary data into shared memory, start in the BACK
 		// and load them in revers order.
+		// 因为 alpha - blending，离屏幕远的高斯会在计算梯度(不透明度梯度)中影响离屏幕近的高斯
+		// 所以需要从后往前，在从全局显存抓数据到共享内存时从后往前
 		block.sync();
 		const int progress = i * BLOCK_SIZE + block.thread_rank();
 		if (range.x + progress < range.y)
 		{
+			// range.y - progress - 1 这里可以看出来是逆序加载
+			// 整个线程块 (Block) 是从后向前加载高斯参数的
 			const int coll_id = point_list[range.y - progress - 1];
+			// 一个 Warp 包含32个 thread ，这32个 thread 对应的 block.thread_rank() 是连续的
+			// 所以这里虽然是倒序加载，但是写入shared_memory的地址是连续的
 			collected_id[block.thread_rank()] = coll_id;
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
@@ -564,10 +574,15 @@ renderCUDA(
 		block.sync();
 
 		// Iterate over Gaussians
+		// 这里的顺序是从后向前
+		// 也就是从当前 tile 中的最后一个 gs椭球 开始向前遍历
 		for (int j = 0; !done && j < min(BLOCK_SIZE, toDo); j++)
 		{
 			// Keep track of current Gaussian ID. Skip, if this one
 			// is behind the last contributor for this pixel.
+			// 因为在前向渲染的时候是前向后blending的
+			// 最后会记录一个最终停在那的高斯球
+			// 后面的高斯由于渲染时根本没用，所以反传时也用不到
 			contributor--;
 			if (contributor >= last_contributor)
 				continue;
@@ -576,6 +591,9 @@ renderCUDA(
 			const float2 xy = collected_xy[j];
 			const float2 d = { xy.x - pixf.x, xy.y - pixf.y };
 			const float4 con_o = collected_conic_opacity[j];
+			// 这里不存 power 和 G ，而是直接计算
+			// 时间 换 空间
+			// 我们只存储高斯椭球的协方差矩阵
 			const float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
 			if (power > 0.0f)
 				continue;
@@ -584,8 +602,9 @@ renderCUDA(
 			const float alpha = min(0.99f, con_o.w * G);
 			if (alpha < 1.0f / 255.0f)
 				continue;
-
+			// 更新 T 为通过该高斯椭球前的 T
 			T = T / (1.f - alpha);
+			// ！！！！！准备开始算 笔记中的求解1 : Loss 对 Color 的梯度
 			const float dchannel_dcolor = alpha * T;
 
 			// Propagate gradients to per-Gaussian colors and keep
@@ -596,15 +615,23 @@ renderCUDA(
 			for (int ch = 0; ch < C; ch++)
 			{
 				const float c = collected_colors[ch * BLOCK_SIZE + j];
+				// 这里准备开始计算一个十分困难的梯度 dL_dalpha
+				// 具体的计算思路见笔记 ， 需要将它拆成两部分
+				// 后半部分：
+				// 使用了动态规划(dp)的思想
+				// accum_rec 就是 公式推导中的 C_afternorm
+				// 表示当前正在处理的高斯球正后方所有高斯球累加出来的背景颜色
 				// Update last color (to be used in the next iteration)
 				accum_rec[ch] = last_alpha * last_color[ch] + (1.f - last_alpha) * accum_rec[ch];
 				last_color[ch] = c;
-
+				// 前半部分：
 				const float dL_dchannel = dL_dpixel[ch];
 				dL_dalpha += (c - accum_rec[ch]) * dL_dchannel;
+				// 下面解释了为什么用 atomicAdd
 				// Update the gradients w.r.t. color of the Gaussian. 
 				// Atomic, since this pixel is just one of potentially
 				// many that were affected by this Gaussian.
+				// ！！！！！恭喜你算出了 笔记中的求解1 : Loss 对 Color 的梯度
 				atomicAdd(&(dL_dcolors[global_id * C + ch]), dchannel_dcolor * dL_dchannel);
 			}
 			// Propagate gradients from inverse depth to alphaas and
@@ -617,7 +644,7 @@ renderCUDA(
 			dL_dalpha += (invd - accum_invdepth_rec) * dL_invdepth;
 			atomicAdd(&(dL_dinvdepths[global_id]), dchannel_dcolor * dL_invdepth);
 			}
-
+			// 最后还得乘以前面的不透明度
 			dL_dalpha *= T;
 			// Update last alpha (to be used in the next iteration)
 			last_alpha = alpha;
