@@ -11,166 +11,6 @@
 * 计算每个高斯的前后顺序
 * 计算每个像素的颜色           - renderCUDA
 ---
-## gaussian splatting backward 的近似步骤:
-### Overview
-* Input : 
-  | 输入 | 名称 | 维度|
-  |-|-|-|
-  | $point_{gaussian3d}$ | 3D 位置 | $(Gaussians, 3)$ |
-  | $RGB_{gaussian3d}$ | 高斯椭球的颜色 | $(Gaussians, 3)$ |
-  | $rotation_{gaussian3d}$ | 旋转四元数 | $(Gaussians, 4)$ |
-  | $scale_{gaussian3d}$ | 椭球轴的长度 | $(Gaussians, 3)$ |
-  | $opacity_{gaussian3d}$ | 椭球透明度 | $(Gaussians, 1)$ |
-* Output :
-  | 输出 | 名称 | 维度 |
-  |-|-|-|
-  | $RGB_{pixel}$ | 像素的颜色 | $(Pixles, 3)$ |
-* Loss Function :
-  $$L1 + SSIM$$
-* **策略：** 由于 ```diff-gaussian-rasterization``` 分为两个过程：EWA Splatting + rendering，所以我们也需要分开进行反向传播即先反向传播rendering部分再反向传播EWA Splatting。
-### Rendering 部分的梯度计算 —— 链式法则
-#### 前置准备工作
-* 已知 : $\frac{\partial Loss}{\partial {RGB_{pixel}}} $
-  | 求解 |
-  |-|
-  | $\frac{\partial Loss}{\partial RGB_{gaussian2d}} $ |
-  | $\frac{\partial Loss}{\partial opacity_{gaussian2d}} $ |
-  | $\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} $ |
-  | $\frac{\partial Loss}{\partial \mu_{gaussian2d}}$ |
-* 用到的重要前向渲染公式：
-  1. **相对坐标计算 (Delta)：** 计算像素坐标 $(x, y)$ 与高斯球 2D 中心 $\mu = (\mu_x, \mu_y)$ 的差值。
-    $$
-    \begin{equation}
-    \begin{aligned}
-      dx &= x - \mu_x \\
-      dy &= y - \mu_y
-    \end{aligned}
-    \end{equation}
-    $$
-  2. **高斯指数部分 ```(Power / G)```：** 利用 2D 协方差矩阵的逆（即 conic2D，包含三个独立元素 $\Sigma^{-1}_{11}, \Sigma^{-1}_{12}, \Sigma^{-1}_{22}$）计算马氏距离的负半值。
-    $$
-    \begin{equation}
-    \begin{aligned}
-      Power &= -\frac{1}{2} (X - \mu)^T \Sigma^{-1} (X - \mu) \\
-            &= -0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2 \\
-            &= -0.5 \cdot \Sigma^{-1}_{11} \cdot (x - \mu_x)^2 - \Sigma^{-1}_{12} \cdot (x - \mu_x) \cdot (y - \mu_y) - 0.5 \cdot \Sigma^{-1}_{22} \cdot (y - \mu_y)^2
-    \end{aligned}
-    \end{equation}
-    $$
-  3. **当前层的最终 Alpha ($\alpha_i$)：** 由基础不透明度（opacity）乘上高斯衰减。
-    $$
-    \begin{equation}
-    \begin{aligned}
-      \alpha_i = opacity_i \cdot \exp(Power)
-    \end{aligned}
-    \end{equation}
-    $$   
-  4. **Alpha 混合与透射率 (Alpha-compositing)：** 设 $T_i$ 为光线到达第 $i$ 个高斯球时的累积透射率（即背景光还能透过多少，初始为 1）。最终像素颜色:
-    $$
-    \begin{equation}
-    \begin{aligned}
-      C_{pixel} &= \sum_{i} c_i \cdot \alpha_i \cdot T_i \\
-                &= \sum_{i} c_i \cdot \alpha_i \cdot (1 - \alpha_0)(1 - \alpha_1)\dots(1 - \alpha_{i - 1})
-    \end{aligned}
-    \end{equation}
-    $$    
-#### 求解1：颜色梯度 $\frac{\partial Loss}{\partial RGB_{gaussian2d}} $ (对应了```renderCUDA```核函数中的```dL_dcolors```)
-  $$
-  \begin{equation}
-  \begin{aligned}
-    \frac{\partial Loss}{\partial RGB_{gaussian2d}}
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot{\frac{\partial {RGB_{pixel}}}{\partial RGB_{gaussian2d}}} \\
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot (\alpha_i \cdot T_i)
-  \end{aligned}
-  \end{equation}
-  $$  
-#### 求解2：基础不透明度 $ opacity_i $ 梯度 $\frac{\partial Loss}{\partial opacity_{gaussian2d}}$ (对应了```renderCUDA```核函数中的```dL_dopacity```)
-  $$
-  \begin{equation}
-  \begin{aligned}
-    \frac{\partial Loss}{\partial opacity_{gaussian2d}}
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial opacity_i} \\
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial{\alpha_i}}{\partial{opacity_i}} \\
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \exp(Power) \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \\
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \exp(Power) \cdot[T_i \cdot C_i - T_i \cdot \alpha_{i+1} \cdot C_{i+1} - T_i \cdot (1-\alpha_{i+1})\cdot \alpha_{i+2} \cdot C_{i+2} - \dots] \\
-              &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \exp(Power) \cdot T_i \cdot (c_i - C_{after\_norm})
-  \end{aligned}
-  \end{equation}
-  $$ 
-  > 针对梯度计算中的$\frac{\partial {RGB_{pixel}}}{\partial \alpha_i}$，我们可以通过将椭球分为前、中、后三部分得以简化计算，方法如下：
-  > 由于 $$
-  \begin{equation}
-  \begin{aligned}
-    C_{pixel} &= \sum_{i} c_i \cdot \alpha_i \cdot T_i \\
-              &= \sum_{i = 0}^{k-1} c_i \cdot \alpha_i \cdot T_i  + T_k \cdot \alpha_k \cdot c_k + \sum_{i = k+1} c_i \cdot \alpha_i \cdot T_i\\
-              &= C_{before} + T_k \cdot \alpha_k \cdot c_k + T_k \cdot (1 - \alpha_k) \cdot C_{after\_norm}
-  \end{aligned}
-  \end{equation}
-  $$
-  > $C_{after\_norm}$ 为后续所有高斯球在该点剥离了 $T_{i+1}$ 衰减后的归一化累积颜色。
-  > $$
-  \begin{equation}
-  \begin{aligned}
-    \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} &= 
-    \frac{\partial C_{pixel}}{\partial \alpha_i} = 0 + T_i \cdot c_i - T_i \cdot C_{after\_norm} = T_i \cdot (c_i - C_{after\_norm})
-  \end{aligned}
-  \end{equation}
-  $$
-
-
-#### 求解3：2D 协方差梯度 $\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}$ (对应了```renderCUDA```核函数中的```dL_dconic2D```)
-  $$
-  \begin{equation}
-  \begin{aligned}
-    \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} 
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \Sigma^{-1}_{gaussian2d}} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial \Sigma^{-1}_{gaussian2d}} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial Power} \cdot \frac{\partial Power }{\partial \Sigma^{-1}_{gaussian2d}} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial Power} \cdot \frac{\partial (-0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2) }{\partial 
-    \begin{bmatrix}
-      \Sigma^{-1}_{11} & \Sigma^{-1}_{12} \\
-      \Sigma^{-1}_{21} & \Sigma^{-1}_{22}
-    \end{bmatrix}} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot  Opacity_i \cdot \exp(Power) \cdot 
-    \begin{bmatrix}
-      -0.5 (dx)^2 & -dxdy \\
-      -dxdy & -0.5(dy)^2
-    \end{bmatrix}
-    \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i}
-  \end{aligned}
-  \end{equation}
-  $$ 
-#### 求解4：2D 均值坐标梯度 $\frac{\partial Loss}{\partial \mu_{gaussian2d}}$ (对应了```renderCUDA```核函数中的```dL_dmean2D```)
-  $$
-  \begin{equation}
-  \begin{aligned}
-    \frac{\partial Loss}{\partial \mu_{gaussian2d}}
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial Power} \cdot \frac{\partial Power}{\partial \mu_{gaussian2d}} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot Opacity_i \cdot \exp(Power) \cdot \frac{\partial (-0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2)}{\partial 
-    \begin{bmatrix}
-      \mu_x \\ \mu_y
-    \end{bmatrix}
-    } \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot Opacity_i \cdot \exp(Power) \cdot \frac{\partial [-0.5 \cdot \Sigma^{-1}_{11} \cdot (x - \mu_x)^2 - \Sigma^{-1}_{12} \cdot (x - \mu_x) \cdot (y - \mu_y) - 0.5 \cdot \Sigma^{-1}_{22} \cdot (y - \mu_y)^2]}{\partial 
-    \begin{bmatrix}
-      \mu_x \\ \mu_y
-    \end{bmatrix}
-    } \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot Opacity_i \cdot \exp(Power) \cdot 
-    \begin{bmatrix}
-      \Sigma^{-1}_{11} & \Sigma^{-1}_{12} \\
-      \Sigma^{-1}_{12} & \Sigma^{-1}_{22}
-    \end{bmatrix}
-    \cdot 
-    \begin{bmatrix}
-      x - \mu_x \\
-      y - \mu_y
-    \end{bmatrix}
-    \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i}
-  \end{aligned}
-  \end{equation}
-  $$  
----
 ## 每一个 pixel 处颜色的获取流程
 
 ### 第一步：计算像素到高斯中心的“马氏距离” (Mahalanobis Distance)
@@ -372,6 +212,45 @@ $$ -->
   4. 接着，256 个像素线程开始飞速地从公共工作台上读取这 256 个高斯的数据，计算它们对自己像素的颜色影响。因为是在芯片内部的高速缓存里读，速度快如闪电！
   5. 算完之后，清空工作台，进入**第二轮 (Round 1)**，再去搬接下来的一批高斯...
 * 这就是为什么叫 collected_...（收集来的数据）的原因！这是一种被称为 集体获取 (Collective Fetch / Cooperative Fetch) 的经典 CUDA 优化设计。
+---
+## 在计算梯度的过程中频繁使用```atomicAdd```原子加法操作
+atomicAdd（原子加法）是 CUDA 编程中解决数据竞争（Data Race）的终极武器。它不仅极其常用，而且是理解 GPU 多线程并发冲突的核心
+### ```atomicAdd```解决了什么问题？
+> GPU 中的线程 A 和线程 B 同时想给变量 X（初始值为 0）加上 1。
+> 标准的加法操作其实分为三步：
+> **读（Read）：**把 X 的值读进寄存器。
+> **改（Modify）：**在寄存器里加 1。
+> **写（Write）：**把新值写回内存 X。
+#### 多线程工作时面临的问题：
+但是当多个线程同时去修改同一个内存地址的值时，会发生如下场景
+线程 A 读到 X=0。
+在 A 还没写回时，线程 B 也去读，读到的也是 X=0。
+线程 A 算出 1，写回内存，此时 X=1。
+线程 B 算出 1，写回内存，也把 X=1 覆盖进去了。
+结果：明明加了两次，最终 X 却是 1！这叫**“写后写（WAW）”**冲突。
+#### ```atomicAdd```解决问题：
+```atomicAdd(address, value)``` 告诉 GPU 硬件：“把读、改、写这三步锁死成一个不可分割的整体（原子）”。
+也就是说，当线程 A 在执行这三步时，内存地址 address 会被硬件级别的锁保护起来，线程 B 必须在门外排队，直到 A 写完，B 才能去读。这样就保证了结果绝对正确（最终 X=2）。
+
+### 如何使用```atomicAdd(address, value)```
+接收两个参数：**目标内存的指针和要加的值**。以 3dgs 中 backward.cu 的代码为例：
+```cpp
+atomicAdd(&(dL_dcolors[global_id * C + ch]), dchannel_dcolor * dL_dchannel);
+```
+> 参数 1（指针）：```&(dL_dcolors[...])```，表示第 global_id 个高斯球的第 ch 个颜色通道梯度的内存地址。
+> 参数 2（值）：```dchannel_dcolor * dL_dchannel```，也就是当前这个像素算出来的局部梯度。
+
+### ```atomicAdd```在使用中的利与弊
+**会破坏了并行性**：化并行为串行。当你对同一个地址使用 atomicAdd 时，原本可以 32 个线程一起算的操作，被迫变成了串行排队。
+> 如果几万个线程都在抢夺同一个内存地址（这叫 **Highly Contended 原子冲突**），GPU 的性能会瞬间跌落谷底，比 CPU 还要慢。
+
+### ```atomicAdd``` 与 ```__shared__```
+```atomicAdd```可以作用于全局内存（Global Memory），也可以作用于共享内存（Shared Memory），**但搭配共享内存是最高级的优化手段！**
+如果能够确定所有的冲突都只发生在同一个 Block 内部，标准化搭配共享内存使用```atomicAdd```的方法是：
+1. 在共享内存里开辟一块小数组。
+2. Block 内的 256 个线程先使用 atomicAdd 往共享内存里累加（共享内存的原子操作在 L1 Cache 极速完成，冲突代价极小）。
+3. 算出 Block 内部的总和后，再派出一个代表（通常是 Thread 0），用一次 atomicAdd 把共享内存里的总和累加到全局显存中。
+> 但是在3dgs中，因为一个高斯球可能非常大，覆盖了屏幕上的多个 Tile。处理不同 Tile 的像素是由不同的 Block 执行的。不同的 Block 之间无法通过共享内存通信，所以它们只能把梯度原子累加到全局显存里。全局显存的原子加法非常昂贵，延迟很高。
 ---
 ## 反向传播逻辑顺序梳理 —— 链式求导过程
 ### 反向传播要更新的参数：

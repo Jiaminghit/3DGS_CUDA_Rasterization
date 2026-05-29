@@ -626,6 +626,7 @@ renderCUDA(
 				last_color[ch] = c;
 				// 前半部分：
 				const float dL_dchannel = dL_dpixel[ch];
+				// 顺便求出来dL / dalpha 为后续求关于不透明度做准备
 				dL_dalpha += (c - accum_rec[ch]) * dL_dchannel;
 				// 下面解释了为什么用 atomicAdd
 				// Update the gradients w.r.t. color of the Gaussian. 
