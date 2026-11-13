@@ -12,17 +12,14 @@
   | 输出 | 名称 | 维度 |
   |-|-|-|
   | $`RGB_{pixel}`$ | 像素的颜色 | $`(Pixles, 3)`$ |
-* Loss Function :
-  ```math
-  L1 + SSIM
-  ```
+* Loss Function : $`L1 + SSIM`$
 * **策略：** 由于 ```diff-gaussian-rasterization``` 分为两个过程：EWA Splatting + rendering，所以我们也需要分开进行反向传播即先反向传播rendering部分再反向传播EWA Splatting。
 ### renderCUDA 部分的梯度计算 —— 链式法则
 #### 前置准备工作
-##### 已知 : $`\frac{\partial Loss}{\partial {RGB_{pixel}}}`$
+##### 已知 : $`\frac{\partial Loss}{\partial RGB_{pixel}}`$
   |已知| 求解 |
   |-|-|
-  |$`\frac{\partial Loss}{\partial {RGB_{pixel}}}`$| $`\frac{\partial Loss}{\partial RGB_{gaussian2d}}`$ |
+  |$`\frac{\partial Loss}{\partial RGB_{pixel}}`$| $`\frac{\partial Loss}{\partial RGB_{gaussian2d}}`$ |
   || $`\frac{\partial Loss}{\partial opacity_{gaussian2d}}`$ |
   || $`\frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}}`$ |
   || $`\frac{\partial Loss}{\partial \mu_{gaussian2d}}`$ |
@@ -40,7 +37,7 @@
       
 ```math
 \begin{aligned}
-  Power &= -\frac{1}{2} (X - \mu)^T \Sigma^{-1} (X - \mu) \\
+  Power &= -\frac 1 2 (X - \mu)^T \Sigma^{-1} (X - \mu) \\
         &= -0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2 \\
         &= -0.5 \cdot \Sigma^{-1}_{11} \cdot (x - \mu_x)^2 - \Sigma^{-1}_{12} \cdot (x - \mu_x) \cdot (y - \mu_y) - 0.5 \cdot \Sigma^{-1}_{22} \cdot (y - \mu_y)^2
 \end{aligned}
@@ -58,8 +55,8 @@
 
 ```math
 \begin{aligned}
-  C_{pixel} &= \sum_{i} c_i \cdot \alpha_i \cdot T_i \\
-            &= \sum_{i} c_i \cdot \alpha_i \cdot (1 - \alpha_0)(1 - \alpha_1)\dots(1 - \alpha_{i - 1})
+  C_{pixel} &= \sum_i c_i \cdot \alpha_i \cdot T_i \\
+            &= \sum_i c_i \cdot \alpha_i \cdot (1 - \alpha_0)(1 - \alpha_1)\dots(1 - \alpha_{i - 1})
 \end{aligned}
 ```
 #### 求解1：颜色梯度 $`\frac{\partial Loss}{\partial RGB_{gaussian2d}}`$ (对应了```renderCUDA```核函数中的```dL_dcolors```)
@@ -67,8 +64,8 @@
   ```math
   \begin{aligned}
     \frac{\partial Loss}{\partial RGB_{gaussian2d}}
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot{\frac{\partial {RGB_{pixel}}}{\partial RGB_{gaussian2d}}} \\
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot (\alpha_i \cdot T_i)
+              &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot{\frac{\partial RGB_{pixel}}{\partial RGB_{gaussian2d}}} \\
+              &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot (\alpha_i \cdot T_i)
   \end{aligned}
   ```
 
@@ -96,20 +93,20 @@
   ```math
   \begin{aligned}
     \frac{\partial Loss}{\partial opacity_{gaussian2d}}
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial opacity_i} \\
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial{\alpha_i}}{\partial{opacity_i}} \\
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \exp(Power) \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \\
-              &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \exp(Power) \cdot[T_i \cdot C_i - T_i \cdot \alpha_{i+1} \cdot C_{i+1} - T_i \cdot (1-\alpha_{i+1})\cdot \alpha_{i+2} \cdot C_{i+2} - \dots] \\
+              &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \frac{\partial RGB_{pixel}}{\partial opacity_i} \\
+              &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \frac{\partial RGB_{pixel}}{\partial \alpha_i} \cdot \frac{\partial{\alpha_i}}{\partial{opacity_i}} \\
+              &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \exp(Power) \cdot \frac{\partial RGB_{pixel}}{\partial \alpha_i} \\
+              &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \exp(Power) \cdot[T_i \cdot C_i - T_i \cdot \alpha_{i+1} \cdot C_{i+1} - T_i \cdot (1-\alpha_{i+1})\cdot \alpha_{i+2} \cdot C_{i+2} - \dots] \\
               &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \exp(Power) \cdot T_i \cdot (c_i - C_{after\_norm})
   \end{aligned}
   ```
 
-  > 针对梯度计算中的 $`\frac{\partial {RGB_{pixel}}}{\partial \alpha_i}`$ ，我们可以通过将椭球分为前、中、后三部分得以简化计算，方法如下：
+  > 针对梯度计算中的 $`\frac{\partial RGB_{pixel}}{\partial \alpha_i}`$ ，我们可以通过将椭球分为前、中、后三部分得以简化计算，方法如下：
   > 由于 
   
   > ```math
   > \begin{aligned}
-  >   C_{pixel} &= \sum_{i} c_i \cdot \alpha_i \cdot T_i \\
+  >   C_{pixel} &= \sum_i c_i \cdot \alpha_i \cdot T_i \\
   >             &= \sum_{i = 0}^{k-1} c_i \cdot \alpha_i \cdot T_i  + T_k \cdot \alpha_k \cdot c_k + \sum_{i = k+1} c_i \cdot \alpha_i \cdot T_i\\
   >             &= C_{before} + T_k \cdot \alpha_k \cdot c_k + T_k \cdot (1 - \alpha_k) \cdot C_{after\_norm}
   > \end{aligned}
@@ -119,7 +116,7 @@
   
   > ```math
   > \begin{aligned}
-  >   \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} &=
+  >   \frac{\partial RGB_{pixel}}{\partial \alpha_i} &=
   >   \frac{\partial C_{pixel}}{\partial \alpha_i} = 0 + T_i \cdot c_i - T_i \cdot C_{after\_norm} = T_i \cdot (c_i - C_{after\_norm})
   > \end{aligned}
   > ```
@@ -130,20 +127,20 @@
   ```math
   \begin{aligned}
     \frac{\partial Loss}{\partial \Sigma^{-1}_{gaussian2d}} 
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \Sigma^{-1}_{gaussian2d}} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial \Sigma^{-1}_{gaussian2d}} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial Power} \cdot \frac{\partial Power }{\partial \Sigma^{-1}_{gaussian2d}} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial Power} \cdot \frac{\partial (-0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2) }{\partial 
+    &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \frac{\partial RGB_{pixel}}{\partial \Sigma^{-1}_{gaussian2d}} \\
+    &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \frac{\partial RGB_{pixel}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial \Sigma^{-1}_{gaussian2d}} \\
+    &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \frac{\partial RGB_{pixel}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial Power} \cdot \frac{\partial Power }{\partial \Sigma^{-1}_{gaussian2d}} \\
+    &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \frac{\partial RGB_{pixel}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial Power} \cdot \frac{\partial (-0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2) }{\partial
     \begin{bmatrix}
       \Sigma^{-1}_{11} & \Sigma^{-1}_{12} \\
       \Sigma^{-1}_{21} & \Sigma^{-1}_{22}
     \end{bmatrix}} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot  Opacity_i \cdot \exp(Power) \cdot 
+    &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot  Opacity_i \cdot \exp(Power) \cdot
     \begin{bmatrix}
       -0.5 (dx)^2 & -dxdy \\
       -dxdy & -0.5(dy)^2
     \end{bmatrix}
-    \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i}
+    \cdot \frac{\partial RGB_{pixel}}{\partial \alpha_i}
   \end{aligned}
   ```
   
@@ -153,18 +150,18 @@
   ```math
   \begin{aligned}
     \frac{\partial Loss}{\partial \mu_{gaussian2dPIXEL}}
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial Power} \cdot \frac{\partial Power}{\partial \mu_{gaussian2d}} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot Opacity_i \cdot \exp(Power) \cdot \frac{\partial (-0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2)}{\partial 
+    &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot \frac{\partial RGB_{pixel}}{\partial \alpha_i} \cdot \frac{\partial \alpha_i}{\partial Power} \cdot \frac{\partial Power}{\partial \mu_{gaussian2d}} \\
+    &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot Opacity_i \cdot \exp(Power) \cdot \frac{\partial (-0.5 \cdot \Sigma^{-1}_{11} \cdot dx^2 - \Sigma^{-1}_{12} \cdot dx \cdot dy - 0.5 \cdot \Sigma^{-1}_{22} \cdot dy^2)}{\partial
     \begin{bmatrix}
       \mu_x \\ \mu_y
     \end{bmatrix}
-    } \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot Opacity_i \cdot \exp(Power) \cdot \frac{\partial [-0.5 \cdot \Sigma^{-1}_{11} \cdot (x - \mu_x)^2 - \Sigma^{-1}_{12} \cdot (x - \mu_x) \cdot (y - \mu_y) - 0.5 \cdot \Sigma^{-1}_{22} \cdot (y - \mu_y)^2]}{\partial 
+    } \cdot \frac{\partial RGB_{pixel}}{\partial \alpha_i} \\
+    &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot Opacity_i \cdot \exp(Power) \cdot \frac{\partial [-0.5 \cdot \Sigma^{-1}_{11} \cdot (x - \mu_x)^2 - \Sigma^{-1}_{12} \cdot (x - \mu_x) \cdot (y - \mu_y) - 0.5 \cdot \Sigma^{-1}_{22} \cdot (y - \mu_y)^2]}{\partial
     \begin{bmatrix}
       \mu_x \\ \mu_y
     \end{bmatrix}
-    } \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i} \\
-    &= \frac{\partial Loss}{\partial {RGB_{pixel}}} \cdot Opacity_i \cdot \exp(Power) \cdot 
+    } \cdot \frac{\partial RGB_{pixel}}{\partial \alpha_i} \\
+    &= \frac{\partial Loss}{\partial RGB_{pixel}} \cdot Opacity_i \cdot \exp(Power) \cdot
     \begin{bmatrix}
       \Sigma^{-1}_{11} & \Sigma^{-1}_{12} \\
       \Sigma^{-1}_{12} & \Sigma^{-1}_{22}
@@ -174,7 +171,7 @@
       x - \mu_x \\
       y - \mu_y
     \end{bmatrix}
-    \cdot \frac{\partial {RGB_{pixel}}}{\partial \alpha_i}
+    \cdot \frac{\partial RGB_{pixel}}{\partial \alpha_i}
   \end{aligned}
   ```
 
@@ -190,11 +187,11 @@
   > 从标准化设备坐标到像素坐标的视口变换 (Viewport Transformation / Pixel Space)：将 $`[-1, 1]`$ 的 NDC 坐标映射到真实的屏幕像素坐标 $`\mu_{2D} = (u, v)`$ 上。已知屏幕的宽度为 $`W`$，高度为 $`H`$。
   
   > ```math
-  > u = \frac{(x_{ndc} + 1) \cdot W - 1}{2}
+  > u = \frac{(x_{ndc} + 1) \cdot W - 1} 2
   > ```
   
   > ```math
-  > v = \frac{(y_{ndc} + 1) \cdot H - 1}{2}
+  > v = \frac{(y_{ndc} + 1) \cdot H - 1} 2
   > ```
 ### preprocess 部分的梯度计算 —— 链式法则
 #### 前置准备工作
@@ -299,11 +296,11 @@ R = \begin{bmatrix}
   * 从标准化设备坐标到像素坐标的视口变换 (Viewport Transformation / Pixel Space)：将 $`[-1, 1]`$ 的 NDC 坐标映射到真实的屏幕像素坐标 $`\mu_{2D} = (u, v)`$ 上。已知屏幕的宽度为 $`W`$，高度为 $`H`$。
 
   ```math
-  u = \frac{(x_{ndc} + 1) \cdot W - 1}{2}
+  u = \frac{(x_{ndc} + 1) \cdot W - 1} 2
   ```
   
   ```math
-  v = \frac{(y_{ndc} + 1) \cdot H - 1}{2}
+  v = \frac{(y_{ndc} + 1) \cdot H - 1} 2
   ```
 
 4. **球谐函数**到**颜色**
@@ -391,9 +388,9 @@ c = \sum_{l, m} SH_l^m \cdot Y_l^m(dir) + 0.5
 ```math
 \begin{aligned}
   Channel \space R : \frac{\partial Loss}{\partial sh[i]} &= \frac{\partial Loss}{\partial Color_{final}} \cdot \frac{\partial Color_{final}}{\partial Color_{raw}} \cdot \frac{\partial Color_{raw}}{\partial sh[i]} \\
-  &= \frac{\partial Loss}{\partial R_{gaussian2d}} \cdot \mathbb{I}(Color_{raw} > 0) \cdot Y_i(dir) \\
-  Channel \space G : \frac{\partial Loss}{\partial sh[i]} &= \frac{\partial Loss}{\partial G_{gaussian2d}} \cdot \mathbb{I}(Color_{raw} > 0) \cdot Y_i(dir) \\
-  Channel \space B : \frac{\partial Loss}{\partial sh[i]} &= \frac{\partial Loss}{\partial B_{gaussian2d}} \cdot \mathbb{I}(Color_{raw} > 0) \cdot Y_i(dir)
+  &= \frac{\partial Loss}{\partial R_{gaussian2d}} \cdot \mathbb I(Color_{raw} > 0) \cdot Y_i(dir) \\
+  Channel \space G : \frac{\partial Loss}{\partial sh[i]} &= \frac{\partial Loss}{\partial G_{gaussian2d}} \cdot \mathbb I(Color_{raw} > 0) \cdot Y_i(dir) \\
+  Channel \space B : \frac{\partial Loss}{\partial sh[i]} &= \frac{\partial Loss}{\partial B_{gaussian2d}} \cdot \mathbb I(Color_{raw} > 0) \cdot Y_i(dir)
 \end{aligned}
 ```
 
@@ -401,7 +398,7 @@ c = \sum_{l, m} SH_l^m \cdot Y_l^m(dir) + 0.5
 
 ```math
 \begin{aligned}
-  \frac{\partial Loss}{\partial SH_{channel}} = \frac{\partial Loss}{\partial Color_{channel}} \cdot \mathbb{I}(Color_{raw} > 0) \cdot 
+  \frac{\partial Loss}{\partial SH_{channel}} = \frac{\partial Loss}{\partial Color_{channel}} \cdot \mathbb I(Color_{raw} > 0) \cdot
   \begin{bmatrix}
     C_0 \\
     -C_1 \cdot y \\
@@ -421,7 +418,7 @@ c = \sum_{l, m} SH_l^m \cdot Y_l^m(dir) + 0.5
   > A : 2D 高斯分布的概率密度函数：
 
   > ```math
-  > G(x) \propto \exp\left(-\frac{1}{2} (x - \mu)^T \Sigma_{2D}^{-1} (x - \mu)\right)
+  > G(x) \propto \exp\left(-\frac 1 2 (x - \mu)^T \Sigma_{2D}^{-1} (x - \mu)\right)
   > ```
 
   > 在 Rendering 的像素级循环中，我们要计算的是高斯衰减指数 Power。这个公式里天生自带的就是 $`\Sigma_{2D}^{-1}`$。如果我们求对 $`\Sigma_{2D}`$ 的梯度，在链式法则中就会多出求逆矩阵导数这一极其繁琐的步骤。**从工程角度看，求矩阵的逆是非常耗时的操作。** 如果每个像素在计算时都去对 $`\Sigma_{2D}`$ 求一次逆，GPU 会慢到无法忍受。因此，3DGS 在 preprocess 阶段，为每个高斯球计算好 $`\Sigma_{2D}`$ 后，立刻求逆，并把逆矩阵 $`\Sigma_{2D}^{-1}`$ 命名为 conic 保存下来。这样在渲染时，成千上万的像素只需要做简单的乘法和加法。
@@ -448,8 +445,8 @@ c = \sum_{l, m} SH_l^m \cdot Y_l^m(dir) + 0.5
   
   ```math
     \begin{aligned}
-      \Sigma_{2D}^{-1} &= \frac{1}{det} \begin{bmatrix} c & -b \\ -b & a \end{bmatrix} \\ 
-      &= \begin{bmatrix} \frac{c}{ac - b^2} & \frac{-b}{ac - b^2} \\ \frac{-b}{ac - b^2} & \frac{a}{ac - b^2} \end{bmatrix} \\
+      \Sigma_{2D}^{-1} &= \frac 1{det} \begin{bmatrix} c & -b \\ -b & a \end{bmatrix} \\
+      &= \begin{bmatrix} \frac c{ac - b^2} & \frac{-b}{ac - b^2} \\ \frac{-b}{ac - b^2} & \frac a{ac - b^2} \end{bmatrix} \\
       &= \begin{bmatrix} c_x & c_y \\ c_y & c_z \end{bmatrix}
     \end{aligned}
   ```
@@ -457,26 +454,26 @@ c = \sum_{l, m} SH_l^m \cdot Y_l^m(dir) + 0.5
   故有对应关系为：
   
   ```math
-  c_x = \frac{c}{a \cdot c - b^2}
+  c_x = \frac c{a \cdot c - b^2}
   ```
   ```math
   c_y = \frac{-b}{a \cdot c - b^2}
   ```
   ```math
-  c_z = \frac{a}{a \cdot c - b^2}
+  c_z = \frac a{a \cdot c - b^2}
   ```
   
   ```math
     \begin{aligned}
       \frac{\partial c_x}{\partial a} &= \frac{0 \cdot det - c \cdot (c)}{det^2} = -\frac{c^2}{det^2} = -(c_x)^2 \\
-      \frac{\partial c_y}{\partial a} &= \frac{0 \cdot det - (-b) \cdot (c)}{det^2} = \frac{b \cdot c}{det^2} = -(\frac{c}{det} \cdot \frac{-b}{det}) = -c_x \cdot c_y \\
+      \frac{\partial c_y}{\partial a} &= \frac{0 \cdot det - (-b) \cdot (c)}{det^2} = \frac{b \cdot c}{det^2} = -(\frac c{det} \cdot \frac{-b}{det}) = -c_x \cdot c_y \\
       \frac{\partial c_z}{\partial a} &= \frac{1 \cdot det - a \cdot (c)}{det^2} = \frac{(ac - b^2) - ac}{det^2} = \frac{-b^2}{det^2} = -(c_y)^2 \\
-      \frac{\partial c_x}{\partial b} &= \frac{0 \cdot det - (-2b) \cdot (c)}{det^2} = - 2\frac{-b}{det} \cdot \frac{c}{det}= -2 c_x c_y \\
+      \frac{\partial c_x}{\partial b} &= \frac{0 \cdot det - (-2b) \cdot (c)}{det^2} = - 2\frac{-b}{det} \cdot \frac c{det}= -2 c_x c_y \\
       \frac{\partial c_y}{\partial b} &= \frac{-(ac - b^2) - (-2b\cdot(-b))}{det^2} = \frac{-ac - b^2}{det^2} = -c_x \cdot c_z - c_y^2 \\
-      \frac{\partial c_z}{\partial b} &= \frac{0 \cdot det - (-2b) \cdot (a)}{det^2} = - 2\frac{-b}{det} \cdot \frac{a}{det}= -2 c_z c_y \\
+      \frac{\partial c_z}{\partial b} &= \frac{0 \cdot det - (-2b) \cdot (a)}{det^2} = - 2\frac{-b}{det} \cdot \frac a{det}= -2 c_z c_y \\
       \frac{\partial c_x}{\partial c} &= \frac{ac - b^2 -ac}{det^2} = - \frac{-b}{det} \cdot \frac{-b}{det}= - c_y^2 \\
       \frac{\partial c_y}{\partial c} &= \frac{0 \cdot det - a\cdot(-b)}{det^2} = -c_y \cdot c_z \\
-      \frac{\partial c_z}{\partial c} &= \frac{0 \cdot det - a \cdot a}{det^2} = - 2\frac{a}{det} \cdot \frac{a}{det}= - c_z^2
+      \frac{\partial c_z}{\partial c} &= \frac{0 \cdot det - a \cdot a}{det^2} = - 2\frac a{det} \cdot \frac a{det}= - c_z^2
     \end{aligned}
   ```
 
@@ -659,7 +656,7 @@ U = \frac{\partial Loss}{\partial R} = S \cdot 2 \cdot S \cdot R \cdot \frac{\pa
 3D均值(即3D高斯椭球球心)在前向传播中影响了三大模块：2D高斯的均值、颜色、2D高斯的协方差矩阵，所以其最终的梯度应该由三部分构成，形如
 
 ```math
-\frac{\partial Loss}{\partial \mu_{3D}} = \text{Grad}_{A} (\text{位置}) + \text{Grad}_{B} (\text{颜色}) + \text{Grad}_{C} (\text{形状})
+\frac{\partial Loss}{\partial \mu_{3D}} = \text{Grad}_A (\text{位置}) + \text{Grad}_B (\text{颜色}) + \text{Grad}_C (\text{形状})
 ```
 
 ##### 由 $`\frac{\partial Loss}{\partial \mu_{gaussian2d}}`$ 求 $`\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{位置})`$
@@ -694,22 +691,22 @@ U = \frac{\partial Loss}{\partial R} = S \cdot 2 \cdot S \cdot R \cdot \frac{\pa
 > ```math
 > \begin{aligned}
 >     \frac{\partial x_{ndc}}{\partial x} &= \frac{\partial (\frac{p_x}{p_w})}{\partial x}
->     = \frac{1}{p_w}\frac{\partial p_x}{\partial x} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial x}
+>     = \frac 1{p_w}\frac{\partial p_x}{\partial x} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial x}
 >     = \frac{P_{00}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{30} \\
 >     \frac{\partial y_{ndc}}{\partial x} &= \frac{\partial (\frac{p_y}{p_w})}{\partial x}
->     = \frac{1}{p_w}\frac{\partial p_y}{\partial x} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial x}
+>     = \frac 1{p_w}\frac{\partial p_y}{\partial x} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial x}
 >     = \frac{P_{10}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{30} \\
 >     \frac{\partial x_{ndc}}{\partial y} &= \frac{\partial (\frac{p_x}{p_w})}{\partial y}
->     = \frac{1}{p_w}\frac{\partial p_x}{\partial y} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial y}
+>     = \frac 1{p_w}\frac{\partial p_x}{\partial y} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial y}
 >     = \frac{P_{01}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{31} \\
 >     \frac{\partial y_{ndc}}{\partial y} &= \frac{\partial (\frac{p_y}{p_w})}{\partial y}
->     = \frac{1}{p_w}\frac{\partial p_y}{\partial y} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial y}
+>     = \frac 1{p_w}\frac{\partial p_y}{\partial y} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial y}
 >     = \frac{P_{11}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{31} \\
 >     \frac{\partial x_{ndc}}{\partial z} &= \frac{\partial (\frac{p_x}{p_w})}{\partial z}
->     = \frac{1}{p_w}\frac{\partial p_x}{\partial z} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial z}
+>     = \frac 1{p_w}\frac{\partial p_x}{\partial z} - \frac{p_x}{p_w^2}\frac{\partial p_w}{\partial z}
 >     = \frac{P_{02}}{p_w} - \frac{p_x}{p_w^2} \cdot P_{32} \\
 >     \frac{\partial y_{ndc}}{\partial z} &= \frac{\partial (\frac{p_y}{p_w})}{\partial z}
->     = \frac{1}{p_w}\frac{\partial p_y}{\partial z} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial z}
+>     = \frac 1{p_w}\frac{\partial p_y}{\partial z} - \frac{p_y}{p_w^2}\frac{\partial p_w}{\partial z}
 >     = \frac{P_{12}}{p_w} - \frac{p_y}{p_w^2} \cdot P_{32}
 > \end{aligned}
 > ```
@@ -756,7 +753,7 @@ U = \frac{\partial Loss}{\partial R} = S \cdot 2 \cdot S \cdot R \cdot \frac{\pa
     
 ```math
   \begin{aligned}
-      dir &= (dir_x, dir_y, dir_z) = \left( \frac{x'}{d}, \frac{y'}{d}, \frac{z'}{d} \right) \\
+      dir &= (dir_x, dir_y, dir_z) = \left( \frac{x'} d, \frac{y'} d, \frac{z'} d \right) \\
       &= \left( \frac{x'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{y'}{\sqrt{(x')^2 + (y')^2 + (z')^2}}, \frac{z'}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \right) \\
       &=  \left(\frac{x - c_x}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{y - c_y}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}}, \frac{z - c_z}{\sqrt{(x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2}} \right)
   \end{aligned}
@@ -790,7 +787,7 @@ U = \frac{\partial Loss}{\partial R} = S \cdot 2 \cdot S \cdot R \cdot \frac{\pa
 ```math
     \begin{aligned}
         \Delta &= \mu_{gaussian3d} - cam\_pos =  (x - c_x, y - c_y, z - c_z) = (x', y', z') \\
-        \because dir &= \frac{\Delta}{d}  = \frac{\Delta}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \\
+        \because dir &= \frac{\Delta} d  = \frac{\Delta}{\sqrt{(x')^2 + (y')^2 + (z')^2}} \\
         \frac{\partial dir}{\partial \mu_{gaussian3d}} = \frac{\partial dir}{\partial \Delta}
             &= \begin{bmatrix}
                 \frac{\partial dir_x}{\partial x'} & \frac{\partial dir_x}{\partial y'} & \frac{\partial dir_x}{\partial z'} \\
@@ -798,12 +795,12 @@ U = \frac{\partial Loss}{\partial R} = S \cdot 2 \cdot S \cdot R \cdot \frac{\pa
                 \frac{\partial dir_z}{\partial x'} & \frac{\partial dir_z}{\partial y'} & \frac{\partial dir_z}{\partial z'}
             \end{bmatrix}
             = \begin{bmatrix}
-            \frac{1}{d} - \frac{(x')^2}{d^3} & -\frac{x' y'}{d^3} & -\frac{x' z'}{d^3} \\
-            -\frac{x' y'}{d^3} & \frac{1}{d} - \frac{(y')^2}{d^3} & -\frac{y' z'}{d^3} \\
-            -\frac{x' z'}{d^3} & -\frac{y' z'}{d^3} & \frac{1}{d} - \frac{(z')^2}{d^3}
+            \frac 1 d - \frac{(x')^2}{d^3} & -\frac{x' y'}{d^3} & -\frac{x' z'}{d^3} \\
+            -\frac{x' y'}{d^3} & \frac 1 d - \frac{(y')^2}{d^3} & -\frac{y' z'}{d^3} \\
+            -\frac{x' z'}{d^3} & -\frac{y' z'}{d^3} & \frac 1 d - \frac{(z')^2}{d^3}
             \end{bmatrix} \\
-            &= \frac{1}{d} \left( I - \frac{\Delta \cdot \Delta^T}{d^2} \right) \\
-            &= \frac{1}{d} \left( I - dir \cdot dir^T \right)
+            &= \frac 1 d \left( I - \frac{\Delta \cdot \Delta^T}{d^2} \right) \\
+            &= \frac 1 d \left( I - dir \cdot dir^T \right)
     \end{aligned}
 ```
 
@@ -813,8 +810,8 @@ U = \frac{\partial Loss}{\partial R} = S \cdot 2 \cdot S \cdot R \cdot \frac{\pa
   \begin{aligned}
       \frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{颜色})
       &= (\frac{\partial dir}{\partial \mu_{gaussian3d}})^T \cdot \frac{\partial Loss}{\partial \text{dir}} \\
-      &= \frac{1}{d} \left( I - dir \cdot dir^T \right) \cdot \frac{\partial Loss}{\partial \text{dir}} \\
-      &= \frac{1}{d} \left( v_{grad} - dir \cdot (dir^T \cdot \frac{\partial Loss}{\partial \text{dir}}) \right)
+      &= \frac 1 d \left( I - dir \cdot dir^T \right) \cdot \frac{\partial Loss}{\partial \text{dir}} \\
+      &= \frac 1 d \left( v_{grad} - dir \cdot (dir^T \cdot \frac{\partial Loss}{\partial \text{dir}}) \right)
   \end{aligned}
 ```
 
@@ -881,10 +878,10 @@ U = \frac{\partial Loss}{\partial R} = S \cdot 2 \cdot S \cdot R \cdot \frac{\pa
           0 & -\frac{f_y}{t_z^2} & 2\frac{f_y \cdot t_y}{t_z^3} \\
           0 & 0 & 0
       \end{bmatrix} \\
-      \therefore \frac{\partial Loss}{\partial t_x} &= G_{J}^{02} \cdot \frac{\partial J_{02}}{\partial t_x} = G_{J}^{02} \cdot \left( -\frac{f_x}{t_z^2} \right) \\
-      \frac{\partial Loss}{\partial t_y} &= G_{J}^{12} \cdot \frac{\partial J_{12}}{\partial t_y} = G_{J}^{12} \cdot \left( -\frac{f_y}{t_z^2} \right) \\
-      \frac{\partial Loss}{\partial t_z} &= G_{J}^{00} \frac{\partial J_{00}}{\partial t_z} + G_{J}^{11} \frac{\partial J_{11}}{\partial t_z} + G_{J}^{02} \frac{\partial J_{02}}{\partial t_z} + G_{J}^{12} \frac{\partial J_{12}}{\partial t_z} \\
-      &= G_{J}^{00}\left(-\frac{f_x}{t_z^2}\right) + G_{J}^{11}\left(-\frac{f_y}{t_z^2}\right) + G_{J}^{02}\left(\frac{2 f_x t_x}{t_z^3}\right) + G_{J}^{12}\left(\frac{2 f_y t_y}{t_z^3}\right)
+      \therefore \frac{\partial Loss}{\partial t_x} &= G_J^{02} \cdot \frac{\partial J_{02}}{\partial t_x} = G_J^{02} \cdot \left( -\frac{f_x}{t_z^2} \right) \\
+      \frac{\partial Loss}{\partial t_y} &= G_J^{12} \cdot \frac{\partial J_{12}}{\partial t_y} = G_J^{12} \cdot \left( -\frac{f_y}{t_z^2} \right) \\
+      \frac{\partial Loss}{\partial t_z} &= G_J^{00} \frac{\partial J_{00}}{\partial t_z} + G_J^{11} \frac{\partial J_{11}}{\partial t_z} + G_J^{02} \frac{\partial J_{02}}{\partial t_z} + G_J^{12} \frac{\partial J_{12}}{\partial t_z} \\
+      &= G_J^{00}\left(-\frac{f_x}{t_z^2}\right) + G_J^{11}\left(-\frac{f_y}{t_z^2}\right) + G_J^{02}\left(\frac{2 f_x t_x}{t_z^3}\right) + G_J^{12}\left(\frac{2 f_y t_y}{t_z^3}\right)
   \end{aligned}
 ```
 * 由相机坐标系下的3D均值的梯度 $`\frac{\partial Loss}{\partial (t_x, t_y, t_z)}`$ 回到世界坐标系下的均值的梯度 $`\frac{\partial Loss}{\partial \mu_{gaussian3d}}(\text{形状})`$
